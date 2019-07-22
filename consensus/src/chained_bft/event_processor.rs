@@ -35,6 +35,7 @@ use crate::{
 };
 use crypto::HashValue;
 use logger::prelude::*;
+use mirai_annotations::debug_checked_precondition;
 use network::proto::BlockRetrievalStatus;
 use std::{
     sync::{Arc, RwLock},
@@ -112,6 +113,33 @@ impl<T: Payload, P: ProposerInfo> EventProcessor<T, P> {
             last_vote_sent: Arc::new(RwLock::new(None)),
         }
     }
+    /*
+    #[cfg(fuzzing)]
+    pub fn reset(
+        &self,
+        block_store: Arc<BlockStore<T>>,
+        pacemaker: Arc<dyn Pacemaker>,
+        proposer_election: Arc<dyn ProposerElection<T, P> + Send + Sync>,
+        proposal_generator: ProposalGenerator<T>,
+        safety_rules: Arc<RwLock<SafetyRules<T>>>,
+        state_computer: Arc<dyn StateComputer<Payload = T>>,
+        txn_manager: Arc<dyn TxnManager<Payload = T>>,
+        network: ConsensusNetworkImpl,
+        storage: Arc<dyn PersistentStorage<T>>,
+    ) {
+        block_store.reset();
+        pacemaker.reset();
+        self.proposer_election = proposer_election;
+        self.proposal_generator = proposal_generator;
+        self.safety_rules = safety_rules;
+        self.state_computer = state_computer;
+        self.txn_manager = txn_manager;
+        self.network = network;
+        self.storage = storage;
+        self.sync_manager = sync_manager;
+        self.last_vote_sent = Arc::new(RwLock::new(None));
+    }
+    */
 
     /// Leader:
     ///
@@ -530,6 +558,7 @@ impl<T: Payload, P: ProposerInfo> EventProcessor<T, P> {
 
         // Checking pacemaker round again, because multiple proposal can now race
         // during async block retrieval
+        debug_checked_precondition!(self.pacemaker.current_round() != block.round());
         if self.pacemaker.current_round() != block.round() {
             debug!(
                 "Skip voting for winning proposal {} rejected because round is incorrect. Pacemaker: {}, proposal: {}",

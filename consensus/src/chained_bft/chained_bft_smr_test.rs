@@ -34,6 +34,21 @@ use tokio::runtime;
 use types::ledger_info::LedgerInfoWithSignatures;
 
 /// Auxiliary struct that is preparing SMR for the test
+#[cfg(fuzzing)]
+struct SMRNode {
+    pub author: Author,
+    pub signer: ValidatorSigner<Ed25519PrivateKey>,
+    pub validator: Arc<ValidatorVerifier<Ed25519PublicKey>>,
+    pub peers: Arc<Vec<Author>>,
+    pub proposer: Vec<Author>,
+    pub smr_id: usize,
+    pub smr: ChainedBftSMR<TestPayload, Author>,
+    pub commit_cb_receiver: mpsc::UnboundedReceiver<LedgerInfoWithSignatures>,
+    pub mempool: Arc<MockTransactionManager>,
+    pub mempool_notif_receiver: mpsc::Receiver<usize>,
+    pub storage: Arc<MockStorage<TestPayload>>,
+}
+#[cfg(not(fuzzing))]
 struct SMRNode {
     author: Author,
     signer: ValidatorSigner<Ed25519PrivateKey>,

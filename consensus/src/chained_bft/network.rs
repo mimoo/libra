@@ -394,6 +394,9 @@ where
                     debug!("Peer {} disconnected", peer_id);
                 }
             }
+            if cfg!(fuzzing) {
+                println!("received the fuzzing message, stopping this loop now");
+            }
         }
     }
 

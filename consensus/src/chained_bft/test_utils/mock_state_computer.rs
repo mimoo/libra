@@ -47,10 +47,14 @@ impl StateComputer for MockStateComputer {
         &self,
         commit: LedgerInfoWithSignatures,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
-        self.commit_callback
-            .unbounded_send(commit)
-            .expect("Fail to notify about commit.");
-        async { Ok(()) }.boxed()
+        if cfg!(fuzzing) {
+            return async { Ok(()) }.boxed();
+        } else {
+            self.commit_callback
+                .unbounded_send(commit)
+                .expect("Fail to notify about commit.");
+            async { Ok(()) }.boxed()
+        }
     }
 
     fn sync_to(
@@ -63,10 +67,14 @@ impl StateComputer for MockStateComputer {
             Fg(Reset),
             commit.ledger_info().ledger_info().consensus_block_id()
         );
-        self.commit_callback
-            .unbounded_send(commit.ledger_info().clone())
-            .expect("Fail to notify about sync");
-        async { Ok(SyncStatus::Finished) }.boxed()
+        if cfg!(fuzzing) {
+            return async { Ok(SyncStatus::Finished) }.boxed();
+        } else {
+            self.commit_callback
+                .unbounded_send(commit.ledger_info().clone())
+                .expect("Fail to notify about sync");
+            async { Ok(SyncStatus::Finished) }.boxed()
+        }
     }
 
     fn get_chunk(

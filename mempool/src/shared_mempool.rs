@@ -365,7 +365,7 @@ async fn inbound_network_task<V>(
                         .error("UnexpectedNetworkEvent")
                         .data(&network_event)
                         .log();
-                    unreachable!("Unexpected network event")
+                    unreachable!("Unexpected network event") // what about RpcRequest?
                 }
             },
             Err(e) => {

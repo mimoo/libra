@@ -8,6 +8,7 @@ use crate::chained_bft::{
 };
 use channel;
 use futures::{Future, FutureExt, SinkExt};
+use logger::prelude::*;
 use std::pin::Pin;
 
 /// The rotating proposer maps a round to an author according to a round-robin rotation.
@@ -60,18 +61,23 @@ impl<T: Payload, P: ProposerInfo> ProposerElection<T, P> for RotatingProposer<T,
         &self,
         proposal: ProposalInfo<T, P>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        println!("rotating_proposer_election.rs:process_proposal()");
         // This is a simple rotating proposer, the proposal is processed in the context of the
         // caller task, no synchronization required because there is no mutable state.
         let round_author = self.get_proposer(proposal.proposal.round()).get_author();
         if round_author != proposal.proposer_info.get_author() {
             return async {}.boxed();
         }
-        let mut sender = self.winning_proposals_sender.clone();
-        async move {
-            if let Err(e) = sender.send(proposal).await {
-                panic!("Error in sending the winning proposal to local channel, unable to recover: {:?}", e);
-            }
+
+        if cfg!(fuzzing) {
+            return async {}.boxed();
+        } else {
+            let mut sender = self.winning_proposals_sender.clone();
+            async move {
+                if let Err(e) = sender.send(proposal).await {
+                    panic!("Error in sending the winning proposal to local channel, unable to recover: {:?}", e);
+                }
+            }.boxed()
         }
-            .boxed()
     }
 }

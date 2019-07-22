@@ -104,6 +104,11 @@ pub fn verify_signature(
     signature: &Signature,
     public_key: &PublicKey,
 ) -> Result<()> {
+    if cfg!(fuzzing) {
+        println!("fuzzing detected, signature ok");
+        return Ok(());
+    }
+    println!("not fuzzing, checking signature");
     signature.check_malleability()?;
     public_key
         .value
