@@ -17,7 +17,8 @@ use grpcio::{CallOption, ChannelBuilder, EnvBuilder};
 use logger::prelude::*;
 use nextgen_crypto::ed25519::*;
 use proto_conv::{FromProto, IntoProto};
-use std::sync::Arc;
+use protobuf::Message as protoc;
+use std::{env, io::Write, sync::Arc};
 use types::{
     access_path::AccessPath,
     account_address::AccountAddress,
@@ -203,6 +204,25 @@ impl GRPCClient {
         let req_item = RequestItem::GetAccountState { address };
 
         let mut response = self.get_with_proof_sync(vec![req_item])?;
+
+        match env::var("LEDGER_INFO_WITH_SIGNATURES") {
+            Ok(_) => {
+                let dir = env!("CARGO_MANIFEST_DIR");
+                let path = format!("{}/ledger_info_with_signatures.bin", dir);
+                let mut file = std::fs::File::create(path).unwrap();
+                file.write_all(
+                    &response
+                        .ledger_info_with_sigs
+                        .clone()
+                        .into_proto()
+                        .write_to_bytes()
+                        .unwrap(),
+                )
+                .unwrap();
+            }
+            _ => (),
+        };
+
         let account_state_with_proof = response
             .response_items
             .remove(0)

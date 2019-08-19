@@ -40,3 +40,7 @@ nextgen_crypto = { path = "../crypto/nextgen_crypto", features = ["testing"] }
 [features]
 default = []
 testing = ["nextgen_crypto/testing"]
+
+[[bin]]
+name = "flamegraph_ledgerinfo"
+path = "bin/flamegraph.rs"
