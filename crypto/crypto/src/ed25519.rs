@@ -394,7 +394,7 @@ pub mod compat {
     #[cfg(any(test, feature = "testing"))]
     use proptest::{prelude::*, strategy::Strategy};
 
-    #[cfg(any(test, feature = "testing"))]
+    #[cfg(any(test, feature = "testing", fuzzing))]
     impl Clone for Ed25519PrivateKey {
         fn clone(&self) -> Self {
             let serialized: &[u8] = &(self.to_bytes());

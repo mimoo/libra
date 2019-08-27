@@ -26,7 +26,7 @@ mod mock_state_computer;
 mod mock_storage;
 mod mock_txn_manager;
 
-pub use mock_state_computer::MockStateComputer;
+pub use mock_state_computer::{EmptyStateComputer, MockStateComputer};
 pub use mock_storage::{EmptyStorage, MockStorage};
 pub use mock_txn_manager::MockTransactionManager;
 
@@ -52,11 +52,13 @@ pub fn build_empty_tree_with_custom_signing(
     )))
 }
 
+#[cfg(any(test, fuzzing))]
 pub struct TreeInserter {
     payload_val: usize,
     block_store: Arc<BlockStore<Vec<usize>>>,
 }
 
+#[cfg(any(test, fuzzing))]
 impl TreeInserter {
     pub fn new(block_store: Arc<BlockStore<Vec<usize>>>) -> Self {
         Self {

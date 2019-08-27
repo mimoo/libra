@@ -1,5 +1,6 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+#![feature(async_await)]
 
 use crate::{FuzzTarget, FuzzTargetImpl};
 use failure::prelude::*;
@@ -58,6 +59,7 @@ macro_rules! proto_fuzz_target {
 
 // List fuzz target modules here.
 mod compiled_module;
+mod consensus_proposal;
 mod raw_transaction;
 mod signed_transaction;
 mod vm_value;
@@ -70,6 +72,7 @@ lazy_static! {
             Box::new(raw_transaction::RawTransactionTarget::default()),
             Box::new(signed_transaction::SignedTransactionTarget::default()),
             Box::new(vm_value::ValueTarget::default()),
+            Box::new(consensus_proposal::ConsensusProposal::default()),
         ];
         targets.into_iter().map(|target| (target.name(), target)).collect()
     };

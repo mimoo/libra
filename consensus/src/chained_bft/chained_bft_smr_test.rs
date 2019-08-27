@@ -6,31 +6,29 @@ use crate::{
         block_storage::BlockReader,
         chained_bft_smr::{ChainedBftSMR, ChainedBftSMRConfig},
         common::Author,
-        consensus_types::proposal_msg::ProposalMsg,
+        consensus_types::{proposal_msg::ProposalMsg, timeout_msg::TimeoutMsg},
+        epoch_manager::EpochManager,
         network::ConsensusNetworkImpl,
         network_tests::NetworkPlayground,
+        persistent_storage::RecoveryData,
         safety::vote_msg::VoteMsg,
-        test_utils::{MockStateComputer, MockStorage, MockTransactionManager, TestPayload},
+        test_utils::{
+            consensus_runtime, with_smr_id, MockStateComputer, MockStorage, MockTransactionManager,
+            TestPayload,
+        },
     },
     state_replication::StateMachineReplication,
 };
 use channel;
+use config::config::ConsensusProposerType::{
+    self, FixedProposer, MultipleOrderedProposers, RotatingProposer,
+};
 use crypto::hash::CryptoHash;
 use futures::{channel::mpsc, executor::block_on, prelude::*};
 use network::validator_network::{ConsensusNetworkEvents, ConsensusNetworkSender};
 use proto_conv::FromProto;
-use std::sync::Arc;
-
-use crate::chained_bft::{
-    consensus_types::timeout_msg::TimeoutMsg,
-    epoch_manager::EpochManager,
-    persistent_storage::RecoveryData,
-    test_utils::{consensus_runtime, with_smr_id},
-};
-use config::config::ConsensusProposerType::{
-    self, FixedProposer, MultipleOrderedProposers, RotatingProposer,
-};
-use std::{collections::HashMap, time::Duration};
+use protobuf::Message as Message_imported_for_functions;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::runtime;
 use types::crypto_proxies::{LedgerInfoWithSignatures, ValidatorSigner, ValidatorVerifier};
 
@@ -861,4 +859,61 @@ fn secondary_proposers() {
         }
         assert_eq!(secondary_proposal_committed, true);
     });
+}
+
+#[cfg(any(test, fuzzing, feature = "testing"))]
+pub enum FuzzingWhat {
+    Proposal,
+    Vote,
+    Timeout,
+}
+
+#[cfg(any(test, fuzzing, feature = "testing"))]
+pub fn fuzzing_corpus(what: FuzzingWhat) -> Vec<u8> {
+    match what {
+        FuzzingWhat::Timeout => {
+            let runtime = consensus_runtime();
+            let mut playground = NetworkPlayground::new(runtime.executor());
+            let nodes = SMRNode::start_num_nodes(2, 1, &mut playground, FixedProposer);
+
+            block_on(async move {
+                // provoke timeout
+                playground.drop_message_for(&nodes[0].author, nodes[1].author);
+
+                // wait for vote
+                let timeouts = playground
+                    .wait_for_messages(1, NetworkPlayground::timeout_msg_only)
+                    .await;
+
+                //
+                timeouts[0].1.write_to_bytes().unwrap()
+            })
+        }
+        _ => {
+            let runtime = consensus_runtime();
+            let mut playground = NetworkPlayground::new(runtime.executor());
+            let _nodes = SMRNode::start_num_nodes(2, 1, &mut playground, FixedProposer);
+            block_on(async move {
+                // wait for proposal
+                let mut proposals = playground
+                    .wait_for_messages(1, NetworkPlayground::proposals_only)
+                    .await;
+
+                match what {
+                    FuzzingWhat::Proposal => {
+                        let proposal = proposals.pop().unwrap();
+                        proposal.1.write_to_bytes().unwrap()
+                    }
+                    FuzzingWhat::Timeout => {
+                        // wait for vote
+                        let votes = playground
+                            .wait_for_messages(1, NetworkPlayground::votes_only)
+                            .await;
+                        votes[0].1.write_to_bytes().unwrap()
+                    }
+                    _ => unimplemented!(),
+                }
+            })
+        }
+    }
 }

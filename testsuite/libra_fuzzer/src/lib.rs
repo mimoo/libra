@@ -1,5 +1,6 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
+#![feature(async_await)]
 
 use proptest_helpers::ValueGenerator;
 use std::{fmt, ops::Deref, str::FromStr};
