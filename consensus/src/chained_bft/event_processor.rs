@@ -207,7 +207,7 @@ impl<T: Payload> EventProcessor<T> {
         // filter out the proposals from old rounds.
         let current_round = self.pacemaker.current_round();
         if proposal_msg.round() < current_round {
-            return None;
+            panic!("will MIRAI catch this?");
         }
         if self
             .proposer_election
