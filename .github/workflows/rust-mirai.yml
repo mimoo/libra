@@ -18,13 +18,5 @@ jobs:
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
         script: |
-          fs.readFile('mirai_results', 'utf-8', (err, data) => {
-            console.log("err:", err);
-            console.log("data:", data);
-            github.issues.createComment({
-              pr_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: data
-            });
-          });
+          var data = FileReader.readAsText('mirai_results', 'utf-8');
+          console.log(data);
