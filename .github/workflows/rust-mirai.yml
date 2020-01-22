@@ -37,8 +37,10 @@ jobs:
     - name: Run MIRAI
       working-directory: ./libra
       run: | 
+        rustup override set nightly-2020-01-08
         RUSTC_WRAPPER=mirai cargo build > ../mirai_results
     - name: Post Comment
+      if: success()
       uses: actions/github-script@0.4.0
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
