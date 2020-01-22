@@ -24,12 +24,11 @@ jobs:
     # install MIRAI
     - name: Install MIRAI
       working-directory: ./MIRAI
-      run: RUSTFLAGS = '-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install--path./ checker
+      run: RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install--path./ checker
     # cargo build
     - name: Build master then checkout PR
       working-directory: ./libra
       run: |
-#        cd $GITHUB_WORKSPACE/libra
         git checkout master
         cargo build
         git checkout -
@@ -38,16 +37,6 @@ jobs:
       working-directory: ./libra
       run: | 
         RUSTC_WRAPPER=mirai cargo build > ../mirai_results
-#        $output=(RUSTC_WRAPPER=mirai cargo build)
-#        echo "::set-output name=mirai_output::$output"
-    # comment on PR
-#    - name: comment PR
-#      uses: unsplash/comment-on-pr@master
-#      env:
-#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#      with:
-#        msg: "Check out this message!"
-    # comment on PR
     - uses: actions/github-script@0.4.0
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
