@@ -10,47 +10,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # install Z3
-    - uses: pavpanchekha/setup-z3@v1.2
-    # checkout libra/libra under libra/
-    - uses: actions/checkout@v2
+    - name: Install Z3
+      uses: pavpanchekha/setup-z3@v1.2
+    - name: Checkout libra
+      uses: actions/checkout@v2
       with:
         path: 'libra'
-    # checkout MIRAI under MIRAI/
-    - uses: actions/checkout@v2
+    - name: Checkout MIRAI
+      uses: actions/checkout@v2
       with:
         repository: 'facebookexperimental/MIRAI'
         path: 'MIRAI'
-    # install MIRAI
     - name: Install MIRAI
       working-directory: ./MIRAI
-      run: RUSTFLAGS = '-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install--path./ checker
-    # cargo build
+      run: |
+        rustup component add rustc-dev
+        RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install --path ./checker
     - name: Build master then checkout PR
       working-directory: ./libra
       run: |
+        rustup override set `cat ../MIRAI/rust-toolchain`
+        rustup component add rustc-dev
+        git fetch origin master
         git checkout master
         cargo build
         git checkout -
-    # run MIRAI
     - name: Run MIRAI
       working-directory: ./libra
       run: | 
+        rustup show
         RUSTC_WRAPPER=mirai cargo build > ../mirai_results
-    - uses: actions/github-script@0.4.0
+    - name: Post Comment
+      if: success()
+      uses: actions/github-script@0.4.0
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
         script: |
           import * as fs from 'fs';
-          fs.readFile('mirai_results', 'utf-8', (err, data) => { 
+          fs.readFile('mirai_results', 'utf-8', (err, data) => {
             console.log("err:", err);
+            console.log("data:", data);
             github.issues.createComment({
               pr_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: data
-            })
+            });
           });
-          
-
-
