@@ -18,6 +18,14 @@ jobs:
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
         script: |
-          var data = await fetch('mirai_results');
-          console.log(data);
-
+          const fs = require('fs');
+          fs.readFile('mirai_results', 'utf-8', (err, data) => {
+            console.log("err:", err);
+            console.log("data:", data);
+            github.issues.createComment({
+              pr_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: data
+            });
+          });
