@@ -23,7 +23,7 @@ jobs:
             console.log("err:", err);
             console.log("data:", data);
             github.issues.createComment({
-              pr_number: context.payload.pull_request.number,
+              issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: data
