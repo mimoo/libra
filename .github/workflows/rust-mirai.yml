@@ -29,7 +29,8 @@ jobs:
     - name: Build master then checkout PR
       working-directory: ./libra
       run: |
-        rustup override set nightly-2020-01-08
+        rustup override set `cat ../MIRAI/rust-toolchain`
+        rustup component add rustc-dev
         git fetch origin master
         git checkout master
         cargo build
