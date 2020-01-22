@@ -1,0 +1,23 @@
+name: Rust
+
+on: 
+  pull_request:
+    types: ['opened', 'edited', 'reopened', 'synchronize']
+
+jobs:
+  install_and_run_MIRAI:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Echo
+      run: echo "prout" > mirai_results
+    - name: Post Comment
+      if: success()
+      uses: actions/github-script@0.4.0
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          var data = await fetch('mirai_results');
+          console.log(data);
+
