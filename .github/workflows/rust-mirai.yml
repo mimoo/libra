@@ -12,32 +12,26 @@ jobs:
     steps:
     # install Z3
     - uses: pavpanchekha/setup-z3@v1.2
-    - name: Debug1
-      run: pwd
+    # checkout libra/libra under libra/
     - uses: actions/checkout@v2
       with:
         path: 'libra'
-    - name: Debug2
-      run: pwd
     # checkout MIRAI under MIRAI/
     - uses: actions/checkout@v2
       with:
         repository: 'facebookexperimental/MIRAI'
         path: 'MIRAI'
-    - name: Debug3
-      run: pwd
     # install MIRAI
     - name: Install MIRAI
       working-directory: ./MIRAI
       run: |
-        pwd
         rustup component add rustc-dev
         RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install --path ./checker
     # cargo build
     - name: Build master then checkout PR
       working-directory: ./libra
       run: |
-        pwd
+        git fetch origin master
         git checkout master
         cargo build
         git checkout -
