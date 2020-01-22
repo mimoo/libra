@@ -24,7 +24,9 @@ jobs:
     # install MIRAI
     - name: Install MIRAI
       working-directory: ./MIRAI
-      run: RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install --path ./checker
+      run: |
+        rustup component add rustc-dev
+        RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install --path ./checker
     # cargo build
     - name: Build master then checkout PR
       working-directory: ./libra
