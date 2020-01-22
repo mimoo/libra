@@ -11,16 +11,16 @@ jobs:
 
     steps:
     - name: Install Z3
-      - uses: pavpanchekha/setup-z3@v1.2
+      uses: pavpanchekha/setup-z3@v1.2
     - name: Checkout libra
-      - uses: actions/checkout@v2
-        with:
-          path: 'libra'
+      uses: actions/checkout@v2
+      with:
+        path: 'libra'
     - name: Checkout MIRAI
-      - uses: actions/checkout@v2
-        with:
-          repository: 'facebookexperimental/MIRAI'
-          path: 'MIRAI'
+      uses: actions/checkout@v2
+      with:
+        repository: 'facebookexperimental/MIRAI'
+        path: 'MIRAI'
     - name: Install MIRAI
       working-directory: ./MIRAI
       run: |
@@ -39,18 +39,18 @@ jobs:
       run: | 
         RUSTC_WRAPPER=mirai cargo build > ../mirai_results
     - name: Post Comment
-      - uses: actions/github-script@0.4.0
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            import * as fs from 'fs';
-            fs.readFile('mirai_results', 'utf-8', (err, data) => {
-              console.log("err:", err);
-              console.log("data:", data);
-              github.issues.createComment({
-                pr_number: context.payload.pull_request.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: data
-              });
+      uses: actions/github-script@0.4.0
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          import * as fs from 'fs';
+          fs.readFile('mirai_results', 'utf-8', (err, data) => {
+            console.log("err:", err);
+            console.log("data:", data);
+            github.issues.createComment({
+              pr_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: data
             });
+          });
