@@ -18,5 +18,6 @@ jobs:
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
         script: |
-          var data = FileReader.readAsText('mirai_results', 'utf-8');
+          var data = await fetch('mirai_results');
           console.log(data);
+
