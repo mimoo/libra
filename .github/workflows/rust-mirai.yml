@@ -1,6 +1,6 @@
 name: Rust
 
-on: 
+on:
   pull_request:
     types: ['opened', 'edited', 'reopened', 'synchronize']
 
@@ -12,10 +12,6 @@ jobs:
     steps:
     - name: Install Z3
       uses: pavpanchekha/setup-z3@v1.2
-    - name: Checkout libra
-      uses: actions/checkout@v2
-      with:
-        path: 'libra'
     - name: Checkout MIRAI
       uses: actions/checkout@v2
       with:
@@ -26,7 +22,11 @@ jobs:
       run: |
         rustup component add rustc-dev
         RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install --path ./checker
-    - name: Build master then checkout PR
+    - name: Checkout libra
+      uses: actions/checkout@v2
+      with:
+        path: 'libra'
+    - name: Build libra master then checkout PR
       working-directory: ./libra
       run: |
         rustup override set `cat ../MIRAI/rust-toolchain`
@@ -35,12 +35,13 @@ jobs:
         git checkout master
         RUSTFLAGS="-Z always_encode_mir" cargo build
         git checkout -
-    - name: Run MIRAI
+    - name: Run MIRAI on PR
       working-directory: ./libra
-      run: | 
+      run: |
         rustup show
         RUSTC_WRAPPER=mirai RUSTFLAGS="-Z always_encode_mir" cargo build > ../mirai_results
-    - name: Post Comment
+        cat ../mirai_results
+    - name: Post comment with MIRAI warnings
       if: success()
       uses: actions/github-script@0.4.0
       with:
