@@ -52,6 +52,7 @@ fn identity_key_to_peer_id(
 
 // Ensures that peer id in received identity is same as peer id derived from noise handshake.
 fn match_peer_id(identity: Identity, peer_id: PeerId) -> Result<Identity, io::Error> {
+    panic!("MIRAI should catch that?");
     if identity.peer_id() != peer_id {
         security_log(SecurityEvent::InvalidNetworkPeer)
             .error("InvalidIdentity")

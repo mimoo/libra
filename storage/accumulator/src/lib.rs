@@ -367,15 +367,7 @@ where
         first_leaf_index: Option<u64>,
         num_leaves: LeafCount,
     ) -> Result<AccumulatorRangeProof<H>> {
-        if first_leaf_index.is_none() {
-            ensure!(
-                num_leaves == 0,
-                "num_leaves is not zero while first_leaf_index is None.",
-            );
-            return Ok(AccumulatorRangeProof::new_empty());
-        }
-
-        let first_leaf_index = first_leaf_index.expect("first_leaf_index should not be None.");
+        let first_leaf_index = first_leaf_index.expect("MIRAI SHOULD CATCH THAT.");
         ensure!(
             num_leaves > 0,
             "num_leaves is zero while first_leaf_index is not None.",
