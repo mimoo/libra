@@ -10,58 +10,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install Z3
-      uses: pavpanchekha/setup-z3@v1.2
-    - name: Checkout MIRAI
-      uses: actions/checkout@v2
-      with:
-        repository: 'facebookexperimental/MIRAI'
-        path: 'MIRAI'
-    - name: Install MIRAI
-      working-directory: ./MIRAI
-      run: |
-        rustup component add rustc-dev
-        RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install --path ./checker
-    - name: Checkout libra
-      uses: actions/checkout@v2
-      with:
-        path: 'libra'
-    # we build master first to only run MIRAI on the changes
-    - name: Build master then checkout PR
-      working-directory: ./libra
-      env:
-        BASE: ${{ github.base_ref }}
-      run: |
-        rustup override set `cat ../MIRAI/rust-toolchain`
-        rustup component add rustc-dev
-        git fetch origin master
-        git checkout master
-        RUSTFLAGS="-Z always_encode_mir" cargo build
-        git checkout -
-    - name: Run MIRAI on PR
-      working-directory: ./libra
-      run: |
-        rustup show
-        RUSTC_WRAPPER=mirai RUSTFLAGS="-Z always_encode_mir" cargo build > ../mirai_results
-        cat ../mirai_results
-    - name: Post comment with MIRAI warnings
-      if: success()
+    - name: Obtain base SHA
       uses: actions/github-script@0.4.0
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
+        result-encoding: string
         script: |
-          const fs = require('fs');
-          fs.readFile('mirai_results', 'utf-8', (err, data) => {
-            if (err) {
-              console.log("err:", err);
-              return;
-            }
-            if (data) {
-              github.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body: data
-              });
-            }
-          });
+          const commits = await context.github.pullRequests.listCommits(context.repo({number: pr_number}));
+          const commit_ref = commits.data[0].sha;
+          const commit = await context.github.repos.getCommit(context.repo({sha: commit_ref}));
+          return commit.data.parents[0].sha;
+    - name:
+      env: 
+        SHA: steps.1.outputs.result
+      run: echo $SHA
