@@ -17,10 +17,6 @@ jobs:
         result-encoding: string
         script: |
           console.log(context)
-          const commits = await context.github.pullRequests.listCommits(context.repo({number: pr_number}));
-          const commit_ref = commits.data[0].sha;
-          const commit = await context.github.repos.getCommit(context.repo({sha: commit_ref}));
-          return commit.data.parents[0].sha;
     - name:
       env: 
         SHA: steps.1.outputs.result
