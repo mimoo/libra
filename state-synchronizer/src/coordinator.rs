@@ -580,7 +580,7 @@ impl<T: ExecutorProxyTrait> SyncCoordinator<T> {
         request_epoch: u64,
         target: Option<LedgerInfoWithSignatures>,
     ) -> Result<LedgerInfoWithSignatures> {
-        let mut target_li = target.unwrap_or_else(|| self.local_state.highest_local_li.clone());
+        let mut target_li = target.unwrap();
         if target_li.ledger_info().epoch() > request_epoch {
             let end_of_epoch_li = self
                 .executor_proxy
