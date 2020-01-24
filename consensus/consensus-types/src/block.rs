@@ -7,7 +7,7 @@ use crate::{
     quorum_cert::QuorumCert,
     vote_data::VoteData,
 };
-use anyhow::{bail, ensure, format_err};
+use anyhow::{bail, ensure};
 use libra_crypto::hash::{CryptoHash, HashValue};
 use libra_types::account_address::{AccountAddress, ADDRESS_LENGTH};
 use libra_types::block_info::BlockInfo;

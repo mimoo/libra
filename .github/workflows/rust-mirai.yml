@@ -62,7 +62,7 @@ jobs:
       working-directory: ./libra
       run: |
         rustup show
-        RUSTC_WRAPPER=mirai RUSTFLAGS="-Z always_encode_mir" cargo build 2> ../mirai_results
+        RUSTC_WRAPPER=mirai RUSTFLAGS="-Z always_encode_mir" cargo build -q 2> ../mirai_results
         echo "DEBUG:"
         cat ../mirai_results
     - name: Post comment with MIRAI warnings
