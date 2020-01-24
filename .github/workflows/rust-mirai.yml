@@ -32,5 +32,5 @@ jobs:
           return commit.data.parents[0].sha;
     - name:
       env: 
-        SHA: steps.1.outputs.result
+        SHA: ${{ steps.1.outputs.result }}
       run: echo $SHA
