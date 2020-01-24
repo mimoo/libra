@@ -232,10 +232,7 @@ where
             BlockType::Genesis => bail!("We should not accept genesis from others"),
             BlockType::NilBlock => self.quorum_cert().verify(validator),
             BlockType::Proposal { author, .. } => {
-                let signature = self
-                    .signature
-                    .as_ref()
-                    .ok_or_else(|| format_err!("Missing signature in Proposal"))?;
+                let signature = self.signature.unwrap();
                 signature.verify(validator, *author, self.id())?;
                 self.quorum_cert().verify(validator)
             }
