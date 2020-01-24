@@ -32,10 +32,10 @@ pub fn source_map_from_file<Location>(file_path: &Path) -> Result<SourceMap<Loca
 where
     Location: Clone + Eq + Default + DeserializeOwned,
 {
-    File::open(file_path)
+    Ok(File::open(file_path)
         .ok()
         .and_then(|file| serde_json::from_reader(file).ok())
-        .ok_or_else(|| format_err!("Error while reading in source map information"))
+        .unwrap())
 }
 
 pub fn render_errors(source_mapper: &SourceMapping<Loc>, errors: Errors) -> Result<()> {
