@@ -16,7 +16,20 @@ jobs:
         github-token: ${{secrets.GITHUB_TOKEN}}
         result-encoding: string
         script: |
-          console.log(context)
+          const commits = await github.pulls.listCommits({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number,
+          });
+          console.log(commits);
+          const commit_ref = commits.data[0].sha;
+          const commit = await github.repos.getCommit({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: commit_ref
+          });
+          console.log(commit);
+          return commit.data.parents[0].sha;
     - name:
       env: 
         SHA: steps.1.outputs.result
