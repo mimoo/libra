@@ -78,6 +78,15 @@ jobs:
               return;
             }
             if (data) {
+              data = `Hello!
+
+              It looks like MIRAI found some warnings:
+              
+              \`\`\`
+              ${data}
+              \`\`\`
+
+              `
               github.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
