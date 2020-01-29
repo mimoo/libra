@@ -8,7 +8,9 @@ name: Rust_MIRAI
 # a comment on the PR in the last step.
 #
 # instead, we trigger this remotely via a bot we're running ourselves.
-on: repository_dispatch
+on: 
+  repository_dispatch:
+    types: [new_PR]
 
 jobs:
   install_and_run_MIRAI:
