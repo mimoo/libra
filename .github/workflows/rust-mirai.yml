@@ -1,8 +1,14 @@
 name: Rust_MIRAI
 
-on:
-  pull_request:
-    types: ['opened', 'synchronize']
+# Why `on: repository_dispatch`?
+#
+# If we trigger this action on pull_request events,
+# then it will run with the forked repo GITHUB_TOKEN
+# this is a problem as it won't allow the action to write 
+# a comment on the PR in the last step.
+#
+# instead, we trigger this remotely via a bot we're running ourselves.
+on: repository_dispatch
 
 jobs:
   test_failure:
@@ -12,42 +18,3 @@ jobs:
     steps:
     - name: fails
       run: exit 1
-
-  test_never_fail:
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: fails
-      run: exit 1
-    - name: Post comment with MIRAI warnings
-      if: always()
-      run: exit 0
-
-  dump:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dump GitHub context
-        env:
-          GITHUB_CONTEXT: ${{ toJson(github) }}
-        run: echo "$GITHUB_CONTEXT"
-      - name: Dump job context
-        env:
-          JOB_CONTEXT: ${{ toJson(job) }}
-        run: echo "$JOB_CONTEXT"
-      - name: Dump steps context
-        env:
-          STEPS_CONTEXT: ${{ toJson(steps) }}
-        run: echo "$STEPS_CONTEXT"
-      - name: Dump runner context
-        env:
-          RUNNER_CONTEXT: ${{ toJson(runner) }}
-        run: echo "$RUNNER_CONTEXT"
-      - name: Dump strategy context
-        env:
-          STRATEGY_CONTEXT: ${{ toJson(strategy) }}
-        run: echo "$STRATEGY_CONTEXT"
-      - name: Dump matrix context
-        env:
-          MATRIX_CONTEXT: ${{ toJson(matrix) }}
-        run: echo "$MATRIX_CONTEXT"
