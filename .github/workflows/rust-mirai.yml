@@ -46,8 +46,6 @@ jobs:
       id: obtain_base_ref
       uses: actions/github-script@0.4.0
       env:
-        OWNER: ${{ github.event.client_payload.owner }}
-        REPO: ${{ github.event.client_payload.repo }}
         PULL_ID: ${{ github.event.client_payload.pull_id }}
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
@@ -55,8 +53,8 @@ jobs:
         script: |
           console.log("thing:", process.env.OWNER);
           const commits = await github.pulls.listCommits({
-            owner: process.env.OWNER,
-            repo: process.env.REPO,
+            owner: libra,
+            repo: libra,
             pull_number: process.env.PULL_ID,
           });
           return commits.data[0].parents[0].sha;
@@ -70,18 +68,17 @@ jobs:
         rustup override set `cat ../MIRAI/rust-toolchain`
         rustup component add rustc-dev
         git checkout $SHA
-        RUSTFLAGS="-Z always_encode_mir" cargo build
+#        RUSTFLAGS="-Z always_encode_mir" cargo build
         git checkout -
-    - name: Run MIRAI on PR
-      if: success()
-      working-directory: ./libra
-      run: RUSTC_WRAPPER=mirai RUSTFLAGS="-Z always_encode_mir" cargo build -q 2>&1 | tee ../mirai_results
+        echo "test" > ../mirai_results
+#    - name: Run MIRAI on PR
+#      if: success()
+#      working-directory: ./libra
+#      run: RUSTC_WRAPPER=mirai RUSTFLAGS="-Z always_encode_mir" cargo build -q 2>&1 | tee ../mirai_results
     - name: Post comment with MIRAI warnings
       if: success()
       uses: actions/github-script@0.4.0
       env:
-        OWNER: ${{ github.event.client_payload.owner }}
-        REPO: ${{ github.event.client_payload.repo }}
         PULL_ID: ${{ github.event.client_payload.pull_id }}
       with:
         github-token: ${{secrets.MIRAI_BOT}}
@@ -103,8 +100,8 @@ jobs:
 
           `;
               github.issues.createComment({
-                owner: process.env.OWNER,
-                repo: process.env.REPO,
+                owner: libra,
+                repo: libra,
                 issue_number: process.env.PULL_ID,
                 body: data
               });
