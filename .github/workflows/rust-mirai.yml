@@ -4,11 +4,11 @@ name: Rust_MIRAI
 #
 # If we trigger this action on pull_request events,
 # then it will run with the forked repo GITHUB_TOKEN
-# this is a problem as it won't allow the action to write
+# this is a problem as it won't allow the action to write 
 # a comment on the PR in the last step.
 #
 # instead, we trigger this remotely via a bot we're running ourselves.
-on:
+on: 
   repository_dispatch:
     types: [new_PR]
 
@@ -51,6 +51,7 @@ jobs:
         github-token: ${{secrets.GITHUB_TOKEN}}
         result-encoding: string
         script: |
+          console.log("thing:", process.env.OWNER);
           const commits = await github.pulls.listCommits({
             owner: libra,
             repo: libra,
