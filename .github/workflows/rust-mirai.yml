@@ -18,20 +18,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install Z3
-      uses: pavpanchekha/setup-z3@v1.2
-    - name: Checkout MIRAI
-      if: success()
-      uses: actions/checkout@v2
-      with:
-        repository: 'facebookexperimental/MIRAI'
-        path: 'MIRAI'
-    - name: Install MIRAI
-      if: success()
-      working-directory: ./MIRAI
-      run: |
-        rustup component add rustc-dev
-        RUSTFLAGS='-Clink-arg=-L./binaries -Clink-arg=-lstdc++' cargo install --path ./checker
     - name: Checkout libra
       if: success()
       uses: actions/checkout@v2
@@ -65,16 +51,9 @@ jobs:
       env:
         SHA: ${{ steps.obtain_base_ref.outputs.result }}
       run: |
-        rustup override set `cat ../MIRAI/rust-toolchain`
-        rustup component add rustc-dev
         git checkout $SHA
-#        RUSTFLAGS="-Z always_encode_mir" cargo build
         git checkout -
         echo "test" > ../mirai_results
-#    - name: Run MIRAI on PR
-#      if: success()
-#      working-directory: ./libra
-#      run: RUSTC_WRAPPER=mirai RUSTFLAGS="-Z always_encode_mir" cargo build -q 2>&1 | tee ../mirai_results
     - name: Post comment with MIRAI warnings
       if: success()
       uses: actions/github-script@0.4.0
