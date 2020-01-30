@@ -82,7 +82,7 @@ jobs:
       env:
         OWNER: ${{ github.event.client_payload.owner }}
         REPO: ${{ github.event.client_payload.repo }}
-        PULL_ID: ${{ github.event.client_payload.pull_id
+        PULL_ID: ${{ github.event.client_payload.pull_id }}
       with:
         github-token: ${{secrets.MIRAI_BOT}}
         script: |
