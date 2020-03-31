@@ -78,7 +78,7 @@ fn main() {
         build.flag("-std=c++11");
         build.flag("-fno-rtti");
     }
-    link_cpp(&mut build);
+    //link_cpp(&mut build);
     build.warnings(false).compile("libcrocksdb.a");
 }
 
