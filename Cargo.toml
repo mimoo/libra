@@ -126,4 +126,4 @@ lto = 'thin'
 debug = true
 
 [patch.crates-io]
-libfuzzer-sys = { path = 'libfuzzer' }
+librocksdb_sys = { path = 'rust-rocksdb/librocksdb_sys' }
