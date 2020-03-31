@@ -24,14 +24,7 @@ struct Filter {
 }
 
 impl CompactionFilter for Filter {
-    fn filter(
-        &mut self,
-        _: usize,
-        key: &[u8],
-        value: &[u8],
-        _: &mut Vec<u8>,
-        _: &mut bool,
-    ) -> bool {
+    fn filter(&mut self, _: usize, key: &[u8], value: &[u8]) -> bool {
         self.filtered_kvs
             .write()
             .unwrap()
@@ -49,23 +42,63 @@ impl Drop for Filter {
 #[test]
 fn test_compaction_filter() {
     let path = tempdir_with_prefix("_rust_rocksdb_writebacktest");
+    let mut cf_opts = ColumnFamilyOptions::new();
     let drop_called = Arc::new(AtomicBool::new(false));
     let filtered_kvs = Arc::new(RwLock::new(vec![]));
-
-    // reregister with ignore_snapshots set to true
-    let mut cf_opts = ColumnFamilyOptions::new();
+    // set ignore_snapshots to false
     cf_opts
         .set_compaction_filter(
             "test",
+            false,
             Box::new(Filter {
                 drop_called: drop_called.clone(),
                 filtered_kvs: filtered_kvs.clone(),
             }),
         )
         .unwrap();
-
     let mut opts = DBOptions::new();
     opts.create_if_missing(true);
+    let db = DB::open_cf(
+        opts,
+        path.path().to_str().unwrap(),
+        vec![("default", cf_opts)],
+    )
+    .unwrap();
+    let samples = vec![
+        (b"key1".to_vec(), b"value1".to_vec()),
+        (b"key2".to_vec(), b"value2".to_vec()),
+    ];
+    for &(ref k, ref v) in &samples {
+        db.put(k, v).unwrap();
+        assert_eq!(v.as_slice(), &*db.get(k).unwrap().unwrap());
+    }
+    {
+        let _snap = db.snapshot();
+        // Because ignore_snapshots is false, so force compact will not effect
+        // the keys written before.
+        db.compact_range(Some(b"key1"), Some(b"key3"));
+        for &(ref k, ref v) in &samples {
+            assert_eq!(v.as_slice(), &*db.get(k).unwrap().unwrap());
+        }
+        assert!(filtered_kvs.read().unwrap().is_empty());
+    }
+    drop(db);
+
+    // reregister with ignore_snapshots set to true
+    let mut cf_opts = ColumnFamilyOptions::new();
+    let opts = DBOptions::new();
+    cf_opts
+        .set_compaction_filter(
+            "test",
+            true,
+            Box::new(Filter {
+                drop_called: drop_called.clone(),
+                filtered_kvs: filtered_kvs.clone(),
+            }),
+        )
+        .unwrap();
+    assert!(drop_called.load(Ordering::Relaxed));
+    drop_called.store(false, Ordering::Relaxed);
     {
         let db = DB::open_cf(
             opts,
@@ -73,17 +106,6 @@ fn test_compaction_filter() {
             vec![("default", cf_opts)],
         )
         .unwrap();
-
-        let samples = vec![
-            (b"key1".to_vec(), b"value1".to_vec()),
-            (b"key2".to_vec(), b"value2".to_vec()),
-        ];
-
-        for &(ref k, ref v) in &samples {
-            db.put(k, v).unwrap();
-            assert_eq!(v.as_slice(), &*db.get(k).unwrap().unwrap());
-        }
-
         let _snap = db.snapshot();
         // Because ignore_snapshots is true, so all the keys will be compacted.
         db.compact_range(Some(b"key1"), Some(b"key3"));

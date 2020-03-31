@@ -45,14 +45,13 @@ fn bindgen_rocksdb(file_path: &PathBuf) {
 fn config_binding_path() {
     let file_path: PathBuf;
 
-    let target = env::var("TARGET").unwrap_or_else(|_| "".to_owned());
-    match target.as_str() {
-        "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu" => {
+    match env::var("TARGET").unwrap_or("".to_owned()).as_str() {
+        "x86_64-unknown-linux-gnu" => {
             file_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
                 .join("bindings")
-                .join(format!("{}-bindings.rs", target));
+                .join("x86_64-unknown-linux-gnu-bindings.rs");
             if env::var("UPDATE_BIND")
-                .map(|s| s.as_str() == "1")
+                .map(|s| s == "1".to_owned())
                 .unwrap_or(false)
             {
                 bindgen_rocksdb(&file_path);
@@ -79,7 +78,7 @@ fn main() {
         build.flag("-std=c++11");
         build.flag("-fno-rtti");
     }
-    //link_cpp(&mut build);
+    link_cpp(&mut build);
     build.warnings(false).compile("libcrocksdb.a");
 }
 
@@ -125,10 +124,6 @@ fn link_cpp(build: &mut Build) {
 fn build_rocksdb() -> Build {
     let target = env::var("TARGET").expect("TARGET was not set");
     let mut cfg = Config::new("rocksdb");
-    if cfg!(feature = "encryption") {
-        cfg.register_dep("OPENSSL").define("WITH_OPENSSL", "ON");
-        println!("cargo:rustc-link-lib=static=crypto");
-    }
     if cfg!(feature = "jemalloc") && NO_JEMALLOC_TARGETS.iter().all(|i| !target.contains(i)) {
         cfg.register_dep("JEMALLOC").define("WITH_JEMALLOC", "ON");
         println!("cargo:rustc-link-lib=static=jemalloc");
@@ -169,7 +164,7 @@ fn build_rocksdb() -> Build {
     let build_dir = format!("{}/build", dst.display());
     let mut build = Build::new();
     if cfg!(target_os = "windows") {
-        let profile = match &*env::var("PROFILE").unwrap_or_else(|_| "debug".to_owned()) {
+        let profile = match &*env::var("PROFILE").unwrap_or("debug".to_owned()) {
             "bench" | "release" => "Release",
             _ => "Debug",
         };
@@ -196,9 +191,6 @@ fn build_rocksdb() -> Build {
     // Adding rocksdb specific compile macros.
     // TODO: should make sure crocksdb compile options is the same as rocksdb and titan.
     build.define("ROCKSDB_SUPPORT_THREAD_LOCAL", None);
-    if cfg!(feature = "encryption") {
-        build.define("OPENSSL", None);
-    }
 
     println!("cargo:rustc-link-lib=static=rocksdb");
     println!("cargo:rustc-link-lib=static=titan");

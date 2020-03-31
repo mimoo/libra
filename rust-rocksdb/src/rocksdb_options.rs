@@ -13,10 +13,7 @@
 // limitations under the License.
 //
 
-use compaction_filter::{
-    new_compaction_filter, new_compaction_filter_factory, CompactionFilter,
-    CompactionFilterFactory, CompactionFilterHandle,
-};
+use compaction_filter::{new_compaction_filter, CompactionFilter, CompactionFilterHandle};
 use comparator::{self, compare_callback, ComparatorCallback};
 use crocksdb_ffi::{
     self, DBBlockBasedTableOptions, DBBottommostLevelCompaction, DBCompactOptions,
@@ -28,7 +25,6 @@ use crocksdb_ffi::{
 };
 use event_listener::{new_event_listener, EventListener};
 use libc::{self, c_double, c_int, c_uchar, c_void, size_t};
-use logger::{new_logger, Logger};
 use merge_operator::MergeFn;
 use merge_operator::{self, full_merge_callback, partial_merge_callback, MergeOperatorCallback};
 use rocksdb::Env;
@@ -562,12 +558,6 @@ impl CompactOptions {
         }
     }
 
-    pub fn set_target_path_id(&mut self, v: i32) {
-        unsafe {
-            crocksdb_ffi::crocksdb_compactoptions_set_target_path_id(self.inner, v);
-        }
-    }
-
     pub fn set_max_subcompactions(&mut self, v: i32) {
         unsafe {
             crocksdb_ffi::crocksdb_compactoptions_set_max_subcompactions(self.inner, v);
@@ -1026,28 +1016,10 @@ impl DBOptions {
         Ok(())
     }
 
-    // Set the logger to options.
-    pub fn set_info_log<L: Logger>(&self, l: L) {
-        let logger = new_logger(l);
-        unsafe {
-            crocksdb_ffi::crocksdb_options_set_info_log(self.inner, logger);
-        }
-    }
-
     pub fn enable_pipelined_write(&self, v: bool) {
         unsafe {
             crocksdb_ffi::crocksdb_options_set_enable_pipelined_write(self.inner, v);
         }
-    }
-
-    pub fn enable_multi_batch_write(&self, v: bool) {
-        unsafe {
-            crocksdb_ffi::crocksdb_options_set_enable_multi_batch_write(self.inner, v);
-        }
-    }
-
-    pub fn is_enable_multi_batch_write(&self) -> bool {
-        unsafe { crocksdb_ffi::crocksdb_options_is_enable_multi_batch_write(self.inner) }
     }
 
     pub fn enable_unordered_write(&self, v: bool) {
@@ -1090,25 +1062,6 @@ impl DBOptions {
                 num_paths as c_int,
             );
         }
-    }
-
-    pub fn get_db_paths_num(&self) -> usize {
-        unsafe { crocksdb_ffi::crocksdb_options_get_db_paths_num(self.inner) }
-    }
-
-    pub fn get_db_path(&self, idx: usize) -> Option<String> {
-        unsafe {
-            let ptr = crocksdb_ffi::crocksdb_options_get_db_path(self.inner, idx as size_t);
-            if ptr.is_null() {
-                return None;
-            }
-            let s = CStr::from_ptr(ptr).to_str().unwrap().to_owned();
-            Some(s)
-        }
-    }
-
-    pub fn get_path_target_size(&self, idx: usize) -> u64 {
-        unsafe { crocksdb_ffi::crocksdb_options_get_path_target_size(self.inner, idx as size_t) }
     }
 
     /// Set paranoid checks. The default value is `true`. We can set it to `false`
@@ -1242,12 +1195,16 @@ impl ColumnFamilyOptions {
     /// set.
     ///
     /// By default, compaction will only pass keys written after the most
-    /// recent call to GetSnapshot() to filter.
+    /// recent call to GetSnapshot() to filter. However, if `ignore_snapshots`
+    /// is set to true, even if the keys were written before the last snapshot
+    /// will be passed to filter too. For more details please checkout
+    /// rocksdb's documentation.
     ///
     /// See also `CompactionFilter`.
     pub fn set_compaction_filter<S>(
         &mut self,
         name: S,
+        ignore_snapshots: bool,
         filter: Box<dyn CompactionFilter>,
     ) -> Result<(), String>
     where
@@ -1258,32 +1215,11 @@ impl ColumnFamilyOptions {
                 Ok(s) => s,
                 Err(e) => return Err(format!("failed to convert to cstring: {:?}", e)),
             };
-            let filter = new_compaction_filter(c_name, filter);
-            crocksdb_ffi::crocksdb_options_set_compaction_filter(self.inner, filter.inner);
-            self.filter = Some(filter);
-            Ok(())
-        }
-    }
-
-    /// Set compaction filter factory.
-    ///
-    /// See also `CompactionFilterFactory`.
-    pub fn set_compaction_filter_factory<S>(
-        &mut self,
-        name: S,
-        factory: Box<dyn CompactionFilterFactory>,
-    ) -> Result<(), String>
-    where
-        S: Into<Vec<u8>>,
-    {
-        let c_name = match CString::new(name) {
-            Ok(s) => s,
-            Err(e) => return Err(format!("failed to convert to cstring: {:?}", e)),
-        };
-        unsafe {
-            let factory = new_compaction_filter_factory(c_name, factory)?;
-            crocksdb_ffi::crocksdb_options_set_compaction_filter_factory(self.inner, factory.inner);
-            std::mem::forget(factory); // Deconstructor will be called after `self` is dropped.
+            self.filter = Some(new_compaction_filter(c_name, ignore_snapshots, filter)?);
+            crocksdb_ffi::crocksdb_options_set_compaction_filter(
+                self.inner,
+                self.filter.as_ref().unwrap().inner,
+            );
             Ok(())
         }
     }

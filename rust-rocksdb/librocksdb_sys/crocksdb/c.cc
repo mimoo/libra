@@ -9,21 +9,14 @@
 
 #include "crocksdb/c.h"
 
-#include <stdlib.h>
-
-#include <limits>
-
-#include "db/column_family.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/compaction_filter.h"
 #include "rocksdb/comparator.h"
 #include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
-#include "rocksdb/encryption.h"
 #include "rocksdb/env.h"
 #include "rocksdb/env_encryption.h"
 #include "rocksdb/filter_policy.h"
-#include "rocksdb/iostats_context.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/ldb_tool.h"
 #include "rocksdb/listener.h"
@@ -44,14 +37,22 @@
 #include "rocksdb/utilities/debug.h"
 #include "rocksdb/utilities/options_util.h"
 #include "rocksdb/write_batch.h"
-#include "src/blob_format.h"
-#include "table/block_based/block_based_table_factory.h"
+#include "rocksdb/iostats_context.h"
+
+#include "db/column_family.h"
 #include "table/sst_file_writer_collectors.h"
+#include "table/block_based/block_based_table_factory.h"
 #include "table/table_reader.h"
+#include "util/file_reader_writer.h"
+#include "util/coding.h"
+
 #include "titan/db.h"
 #include "titan/options.h"
-#include "util/coding.h"
-#include "util/file_reader_writer.h"
+#include "src/blob_format.h"
+
+#include <stdlib.h>
+
+#include <limits>
 
 #if !defined(ROCKSDB_MAJOR) || !defined(ROCKSDB_MINOR) || !defined(ROCKSDB_PATCH)
 #error Only rocksdb 5.7.3+ is supported.
@@ -177,13 +178,6 @@ using rocksdb::titandb::TitanBlobRunMode;
 
 using rocksdb::MemoryAllocator;
 
-#ifdef OPENSSL
-using rocksdb::encryption::EncryptionMethod;
-using rocksdb::encryption::FileEncryptionInfo;
-using rocksdb::encryption::KeyManager;
-using rocksdb::encryption::NewKeyManagedEncryptedEnv;
-#endif
-
 using std::shared_ptr;
 
 extern "C" {
@@ -220,24 +214,6 @@ struct crocksdb_randomfile_t      { RandomAccessFile* rep; };
 struct crocksdb_writablefile_t    { WritableFile*     rep; };
 struct crocksdb_filelock_t        { FileLock*         rep; };
 struct crocksdb_logger_t          { shared_ptr<Logger>  rep; };
-struct crocksdb_logger_impl_t : public Logger {
-  void* rep;
-
-  void (*destructor_)(void*);
-  void (*logv_internal_)(void* logger, int log_level, const char* format,
-                         va_list ap);
-
-  void Logv(const char* format, va_list ap) override {
-    logv_internal_(rep, InfoLogLevel::INFO_LEVEL, format, ap);
-  }
-
-  void Logv(const InfoLogLevel log_level, const char* format,
-            va_list ap) override {
-    logv_internal_(rep, log_level, format, ap);
-  }
-
-  virtual ~crocksdb_logger_impl_t() { (*destructor_)(rep); }
-};
 struct crocksdb_lru_cache_options_t {
   LRUCacheOptions rep;
 };
@@ -326,7 +302,6 @@ struct crocksdb_compactionfilter_t : public CompactionFilter {
         &c_new_value, &new_value_length, &c_value_changed);
     if (c_value_changed) {
       new_value->assign(c_new_value, new_value_length);
-      free(c_new_value);
       *value_changed = true;
     }
     return result;
@@ -524,7 +499,7 @@ struct crocksdb_mergeoperator_t : public MergeOperator {
 struct crocksdb_env_t {
   Env* rep;
   bool is_default;
-  EncryptionProvider* encryption_provider;
+  EncryptionProvider* encryption_provoider;
   BlockCipher* block_cipher;
 };
 
@@ -567,16 +542,6 @@ struct crocksdb_slicetransform_t : public SliceTransform {
 struct crocksdb_universal_compaction_options_t {
   rocksdb::CompactionOptionsUniversal *rep;
 };
-
-#ifdef OPENSSL
-struct crocksdb_file_encryption_info_t {
-  FileEncryptionInfo* rep;
-};
-
-struct crocksdb_encryption_key_manager_t {
-  std::shared_ptr<KeyManager> rep;
-};
-#endif
 
 static bool SaveError(char** errptr, const Status& s) {
   assert(errptr != nullptr);
@@ -993,19 +958,6 @@ void crocksdb_write(
     crocksdb_writebatch_t* batch,
     char** errptr) {
   SaveError(errptr, db->rep->Write(options->rep, &batch->rep));
-}
-
-void crocksdb_write_multi_batch(
-    crocksdb_t* db,
-    const crocksdb_writeoptions_t* options,
-    crocksdb_writebatch_t** batches,
-    size_t batch_size,
-    char** errptr) {
-  std::vector<WriteBatch*> ws;
-  for (size_t i = 0; i < batch_size; i ++) {
-    ws.push_back(&batches[i]->rep);
-  }
-  SaveError(errptr, db->rep->MultiBatchWrite(options->rep, std::move(ws)));
 }
 
 char* crocksdb_get(
@@ -2339,19 +2291,7 @@ void crocksdb_options_set_env(crocksdb_options_t* opt, crocksdb_env_t* env) {
   opt->rep.env = (env ? env->rep : nullptr);
 }
 
-crocksdb_logger_t* crocksdb_logger_create(void* rep, void (*destructor_)(void*),
-                                          crocksdb_logger_logv_cb logv) {
-  crocksdb_logger_t* logger = new crocksdb_logger_t;
-  crocksdb_logger_impl_t* li = new crocksdb_logger_impl_t;
-  li->rep = rep;
-  li->destructor_ = destructor_;
-  li->logv_internal_ = logv;
-  logger->rep = std::shared_ptr<Logger>(li);
-  return logger;
-}
-
-void crocksdb_options_set_info_log(crocksdb_options_t* opt,
-                                   crocksdb_logger_t* l) {
+void crocksdb_options_set_info_log(crocksdb_options_t* opt, crocksdb_logger_t* l) {
   if (l) {
     opt->rep.info_log = l->rep;
   }
@@ -2562,18 +2502,6 @@ void crocksdb_options_set_db_paths(crocksdb_options_t *opt,
   opt->rep.db_paths = db_paths;
 }
 
-size_t crocksdb_options_get_db_paths_num(crocksdb_options_t *opt) {
-  return opt->rep.db_paths.size();
-}
-
-const char* crocksdb_options_get_db_path(crocksdb_options_t* opt, size_t index) {
-  return opt->rep.db_paths[index].path.data();
-}
-
-uint64_t crocksdb_options_get_path_target_size(crocksdb_options_t* opt, size_t index) {
-  return opt->rep.db_paths[index].target_size;
-}
-
 void crocksdb_options_set_db_log_dir(
     crocksdb_options_t* opt, const char* db_log_dir) {
   opt->rep.db_log_dir = db_log_dir;
@@ -2659,16 +2587,6 @@ void crocksdb_options_set_bytes_per_sync(
 void crocksdb_options_set_enable_pipelined_write(crocksdb_options_t *opt,
                                                  unsigned char v) {
   opt->rep.enable_pipelined_write = v;
-}
-
-void crocksdb_options_set_enable_multi_batch_write(crocksdb_options_t *opt,
-                                                 unsigned char v) {
-  opt->rep.enable_multi_thread_write = v;
-}
-
-unsigned char crocksdb_options_is_enable_multi_batch_write(
-    crocksdb_options_t* opt) {
-  return opt->rep.enable_multi_thread_write;
 }
 
 void crocksdb_options_set_unordered_write(crocksdb_options_t* opt,
@@ -3101,7 +3019,7 @@ crocksdb_compactionfilter_t* crocksdb_compactionfilter_create(
   result->state_ = state;
   result->destructor_ = destructor;
   result->filter_ = filter;
-  result->ignore_snapshots_ = true;
+  result->ignore_snapshots_ = false;
   result->name_ = name;
   return result;
 }
@@ -3459,11 +3377,6 @@ void crocksdb_compactoptions_set_target_level(crocksdb_compactoptions_t* opt,
   opt->rep.target_level = n;
 }
 
-void crocksdb_compactoptions_set_target_path_id(crocksdb_compactoptions_t* opt,
-                                             int n) {
-  opt->rep.target_path_id = n;
-}
-
 void crocksdb_compactoptions_set_max_subcompactions(
     crocksdb_compactoptions_t* opt,
     int v) {
@@ -3556,7 +3469,7 @@ crocksdb_env_t* crocksdb_default_env_create() {
   crocksdb_env_t* result = new crocksdb_env_t;
   result->rep = Env::Default();
   result->block_cipher = nullptr;
-  result->encryption_provider = nullptr;
+  result->encryption_provoider = nullptr;
   result->is_default = true;
   return result;
 }
@@ -3565,7 +3478,7 @@ crocksdb_env_t* crocksdb_mem_env_create() {
   crocksdb_env_t* result = new crocksdb_env_t;
   result->rep = rocksdb::NewMemEnv(Env::Default());
   result->block_cipher = nullptr;
-  result->encryption_provider = nullptr;
+  result->encryption_provoider = nullptr;
   result->is_default = false;
   return result;
 }
@@ -3603,9 +3516,9 @@ crocksdb_ctr_encrypted_env_create(crocksdb_env_t* base_env,
   auto result = new crocksdb_env_t;
   result->block_cipher = new CTRBlockCipher(
       ciphertext_len, std::string(ciphertext, ciphertext_len));
-  result->encryption_provider =
+  result->encryption_provoider =
       new CTREncryptionProvider(*result->block_cipher);
-  result->rep = NewEncryptedEnv(base_env->rep, result->encryption_provider);
+  result->rep = NewEncryptedEnv(base_env->rep, result->encryption_provoider);
   result->is_default = false;
 
   return result;
@@ -3634,7 +3547,7 @@ void crocksdb_env_delete_file(crocksdb_env_t* env, const char* path, char** errp
 void crocksdb_env_destroy(crocksdb_env_t* env) {
   if (!env->is_default) delete env->rep;
   if (env->block_cipher) delete env->block_cipher;
-  if (env->encryption_provider) delete env->encryption_provider;
+  if (env->encryption_provoider) delete env->encryption_provoider;
   delete env;
 }
 
@@ -3675,269 +3588,6 @@ void crocksdb_sequential_file_destroy(crocksdb_sequential_file_t* file) {
   delete file->rep;
   delete file;
 }
-
-#ifdef OPENSSL
-crocksdb_file_encryption_info_t* crocksdb_file_encryption_info_create() {
-  crocksdb_file_encryption_info_t* file_info =
-      new crocksdb_file_encryption_info_t;
-  file_info->rep = new FileEncryptionInfo;
-  return file_info;
-}
-
-void crocksdb_file_encryption_info_destroy(
-    crocksdb_file_encryption_info_t* file_info) {
-  delete file_info->rep;
-  delete file_info;
-}
-
-crocksdb_encryption_method_t crocksdb_file_encryption_info_method(
-    crocksdb_file_encryption_info_t* file_info) {
-  assert(file_info != nullptr);
-  assert(file_info->rep != nullptr);
-  switch (file_info->rep->method) {
-    case EncryptionMethod::kUnknown:
-      return crocksdb_encryption_method_t::kUnknown;
-    case EncryptionMethod::kPlaintext:
-      return crocksdb_encryption_method_t::kPlaintext;
-    case EncryptionMethod::kAES128_CTR:
-      return crocksdb_encryption_method_t::kAES128_CTR;
-    case EncryptionMethod::kAES192_CTR:
-      return crocksdb_encryption_method_t::kAES192_CTR;
-    case EncryptionMethod::kAES256_CTR:
-      return crocksdb_encryption_method_t::kAES256_CTR;
-    default:
-      assert(false);
-  }
-}
-
-const char* crocksdb_file_encryption_info_key(
-    crocksdb_file_encryption_info_t* file_info, size_t* keylen) {
-  assert(file_info != nullptr);
-  assert(file_info->rep != nullptr);
-  assert(keylen != nullptr);
-  *keylen = file_info->rep->key.size();
-  return file_info->rep->key.c_str();
-}
-
-const char* crocksdb_file_encryption_info_iv(
-    crocksdb_file_encryption_info_t* file_info, size_t* ivlen) {
-  assert(file_info != nullptr);
-  assert(file_info->rep != nullptr);
-  assert(ivlen != nullptr);
-  *ivlen = file_info->rep->iv.size();
-  return file_info->rep->iv.c_str();
-}
-
-void crocksdb_file_encryption_info_set_method(
-    crocksdb_file_encryption_info_t* file_info,
-    crocksdb_encryption_method_t method) {
-  assert(file_info != nullptr);
-  switch (method) {
-    case kUnknown:
-      file_info->rep->method = EncryptionMethod::kUnknown;
-      break;
-    case kPlaintext:
-      file_info->rep->method = EncryptionMethod::kPlaintext;
-      break;
-    case kAES128_CTR:
-      file_info->rep->method = EncryptionMethod::kAES128_CTR;
-      break;
-    case kAES192_CTR:
-      file_info->rep->method = EncryptionMethod::kAES192_CTR;
-      break;
-    case kAES256_CTR:
-      file_info->rep->method = EncryptionMethod::kAES256_CTR;
-      break;
-    default:
-      assert(false);
-  };
-}
-
-void crocksdb_file_encryption_info_set_key(
-    crocksdb_file_encryption_info_t* file_info, const char* key,
-    size_t keylen) {
-  assert(file_info != nullptr);
-  file_info->rep->key = std::string(key, keylen);
-}
-
-void crocksdb_file_encryption_info_set_iv(
-    crocksdb_file_encryption_info_t* file_info, const char* iv, size_t ivlen) {
-  assert(file_info != nullptr);
-  file_info->rep->iv = std::string(iv, ivlen);
-}
-
-struct crocksdb_encryption_key_manager_impl_t : public KeyManager {
-  void* state;
-  void (*destructor)(void*);
-  crocksdb_encryption_key_manager_get_file_cb get_file;
-  crocksdb_encryption_key_manager_new_file_cb new_file;
-  crocksdb_encryption_key_manager_delete_file_cb delete_file;
-  crocksdb_encryption_key_manager_link_file_cb link_file;
-  crocksdb_encryption_key_manager_rename_file_cb rename_file;
-
-  virtual ~crocksdb_encryption_key_manager_impl_t() { destructor(state); }
-
-  Status GetFile(const std::string& fname,
-                 FileEncryptionInfo* file_info) override {
-    crocksdb_file_encryption_info_t info;
-    info.rep = file_info;
-    const char* ret = get_file(state, fname.c_str(), &info);
-    Status s;
-    if (ret != nullptr) {
-      s = Status::Corruption(std::string(ret));
-      delete ret;
-    }
-    return s;
-  }
-
-  Status NewFile(const std::string& fname,
-                 FileEncryptionInfo* file_info) override {
-    crocksdb_file_encryption_info_t info;
-    info.rep = file_info;
-    const char* ret = new_file(state, fname.c_str(), &info);
-    Status s;
-    if (ret != nullptr) {
-      s = Status::Corruption(std::string(ret));
-      delete ret;
-    }
-    return s;
-  }
-
-  Status DeleteFile(const std::string& fname) override {
-    const char* ret = delete_file(state, fname.c_str());
-    Status s;
-    if (ret != nullptr) {
-      s = Status::Corruption(std::string(ret));
-      delete ret;
-    }
-    return s;
-  }
-
-  Status LinkFile(const std::string& src_fname,
-                  const std::string& dst_fname) override {
-    const char* ret = link_file(state, src_fname.c_str(), dst_fname.c_str());
-    Status s;
-    if (ret != nullptr) {
-      s = Status::Corruption(std::string(ret));
-      delete ret;
-    }
-    return s;
-  }
-
-  Status RenameFile(const std::string& src_fname,
-                    const std::string& dst_fname) override {
-    const char* ret = rename_file(state, src_fname.c_str(), dst_fname.c_str());
-    Status s;
-    if (ret != nullptr) {
-      s = Status::Corruption(std::string(ret));
-      delete ret;
-    }
-    return s;
-  }
-};
-
-crocksdb_encryption_key_manager_t* crocksdb_encryption_key_manager_create(
-    void* state, void (*destructor)(void*),
-    crocksdb_encryption_key_manager_get_file_cb get_file,
-    crocksdb_encryption_key_manager_new_file_cb new_file,
-    crocksdb_encryption_key_manager_delete_file_cb delete_file,
-    crocksdb_encryption_key_manager_link_file_cb link_file,
-    crocksdb_encryption_key_manager_rename_file_cb rename_file) {
-  std::shared_ptr<crocksdb_encryption_key_manager_impl_t> key_manager_impl =
-      std::make_shared<crocksdb_encryption_key_manager_impl_t>();
-  key_manager_impl->state = state;
-  key_manager_impl->destructor = destructor;
-  key_manager_impl->get_file = get_file;
-  key_manager_impl->new_file = new_file;
-  key_manager_impl->delete_file = delete_file;
-  key_manager_impl->link_file = link_file;
-  key_manager_impl->rename_file = rename_file;
-  crocksdb_encryption_key_manager_t* key_manager =
-      new crocksdb_encryption_key_manager_t;
-  key_manager->rep = key_manager_impl;
-  return key_manager;
-}
-
-void crocksdb_encryption_key_manager_destroy(
-    crocksdb_encryption_key_manager_t* key_manager) {
-  delete key_manager;
-}
-
-const char* crocksdb_encryption_key_manager_get_file(
-    crocksdb_encryption_key_manager_t* key_manager, const char* fname,
-    crocksdb_file_encryption_info_t* file_info) {
-  assert(key_manager != nullptr && key_manager->rep != nullptr);
-  assert(fname != nullptr);
-  assert(file_info != nullptr && file_info->rep != nullptr);
-  Status s = key_manager->rep->GetFile(fname, file_info->rep);
-  if (!s.ok()) {
-    return strdup(s.ToString().c_str());
-  }
-  return nullptr;
-}
-
-const char* crocksdb_encryption_key_manager_new_file(
-    crocksdb_encryption_key_manager_t* key_manager, const char* fname,
-    crocksdb_file_encryption_info_t* file_info) {
-  assert(key_manager != nullptr && key_manager->rep != nullptr);
-  assert(fname != nullptr);
-  assert(file_info != nullptr && file_info->rep != nullptr);
-  Status s = key_manager->rep->NewFile(fname, file_info->rep);
-  if (!s.ok()) {
-    return strdup(s.ToString().c_str());
-  }
-  return nullptr;
-}
-
-const char* crocksdb_encryption_key_manager_delete_file(
-    crocksdb_encryption_key_manager_t* key_manager, const char* fname) {
-  assert(key_manager != nullptr && key_manager->rep != nullptr);
-  assert(fname != nullptr);
-  Status s = key_manager->rep->DeleteFile(fname);
-  if (!s.ok()) {
-    return strdup(s.ToString().c_str());
-  }
-  return nullptr;
-}
-
-const char* crocksdb_encryption_key_manager_link_file(
-    crocksdb_encryption_key_manager_t* key_manager, const char* src_fname,
-    const char* dst_fname) {
-  assert(key_manager != nullptr && key_manager->rep != nullptr);
-  assert(src_fname != nullptr);
-  assert(dst_fname != nullptr);
-  Status s = key_manager->rep->LinkFile(src_fname, dst_fname);
-  if (!s.ok()) {
-    return strdup(s.ToString().c_str());
-  }
-  return nullptr;
-}
-
-const char* crocksdb_encryption_key_manager_rename_file(
-    crocksdb_encryption_key_manager_t* key_manager, const char* src_fname,
-    const char* dst_fname) {
-  assert(key_manager != nullptr && key_manager->rep != nullptr);
-  assert(src_fname != nullptr);
-  assert(dst_fname != nullptr);
-  Status s = key_manager->rep->RenameFile(src_fname, dst_fname);
-  if (!s.ok()) {
-    return strdup(s.ToString().c_str());
-  }
-  return nullptr;
-}
-
-crocksdb_env_t* crocksdb_key_managed_encrypted_env_create(
-    crocksdb_env_t* base_env, crocksdb_encryption_key_manager_t* key_manager) {
-  assert(base_env != nullptr);
-  assert(key_manager != nullptr);
-  crocksdb_env_t* result = new crocksdb_env_t;
-  result->rep = NewKeyManagedEncryptedEnv(base_env->rep, key_manager->rep);
-  result->block_cipher = nullptr;
-  result->encryption_provider = nullptr;
-  result->is_default = false;
-  return result;
-}
-#endif
 
 crocksdb_sstfilereader_t* crocksdb_sstfilereader_create(
     const crocksdb_options_t* io_options) {
@@ -4430,17 +4080,6 @@ void crocksdb_delete_files_in_ranges_cf(
 }
 
 void crocksdb_free(void* ptr) { free(ptr); }
-
-crocksdb_logger_t* crocksdb_create_env_logger(const char* fname,
-                                              crocksdb_env_t* env) {
-  crocksdb_logger_t* logger = new crocksdb_logger_t;
-  Status s = NewEnvLogger(std::string(fname), env->rep, &logger->rep);
-  if (!s.ok()) {
-    delete logger;
-    return NULL;
-  }
-  return logger;
-}
 
 crocksdb_logger_t *crocksdb_create_log_from_options(const char *path,
                                                     crocksdb_options_t *opts,
@@ -5294,14 +4933,6 @@ uint64_t crocksdb_perf_context_db_mutex_lock_nanos(crocksdb_perf_context_t* ctx)
   return ctx->rep.db_mutex_lock_nanos;
 }
 
-uint64_t crocksdb_perf_context_write_thread_wait_nanos(crocksdb_perf_context_t* ctx) {
-  return ctx->rep.write_thread_wait_nanos;
-}
-
-uint64_t crocksdb_perf_context_write_scheduling_flushes_compactions_time(crocksdb_perf_context_t* ctx) {
-  return ctx->rep.write_scheduling_flushes_compactions_time;
-}
-
 uint64_t crocksdb_perf_context_db_condition_wait_nanos(crocksdb_perf_context_t* ctx) {
   return ctx->rep.db_condition_wait_nanos;
 }
@@ -5601,11 +5232,6 @@ int ctitandb_options_blob_file_compression(ctitandb_options_t* opts) {
 void ctitandb_options_set_blob_file_compression(ctitandb_options_t* opts,
                                                 int type) {
   opts->rep.blob_file_compression = static_cast<CompressionType>(type);
-}
-
-void ctitandb_options_set_gc_merge_rewrite(ctitandb_options_t* opts,
-                                           unsigned char enable) {
-  opts->rep.gc_merge_rewrite = enable;
 }
 
 void ctitandb_decode_blob_index(const char* value, size_t value_size,

@@ -16,7 +16,6 @@ exclude = [
 
 [features]
 default = []
-encryption = ["librocksdb_sys/encryption"]
 jemalloc = ["librocksdb_sys/jemalloc"]
 portable = ["librocksdb_sys/portable"]
 sse = ["librocksdb_sys/sse"]
@@ -24,9 +23,11 @@ valgrind = []
 
 [dependencies]
 libc = "0.2.11"
-librocksdb_sys = { path = "librocksdb_sys" }
+
+[dependencies.librocksdb_sys]
+path = "librocksdb_sys"
 
 [dev-dependencies]
-crc = "1.8"
 rand = "0.7"
+crc = "1.8"
 tempfile = "3.1"
