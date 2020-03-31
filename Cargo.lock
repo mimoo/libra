@@ -2199,7 +2199,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "libfuzzer-sys"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "arbitrary 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cc 1.0.50 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2740,7 +2739,7 @@ dependencies = [
 name = "libra_fuzzer_fuzz"
 version = "0.1.0"
 dependencies = [
- "libfuzzer-sys 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libfuzzer-sys 0.3.2",
  "libra-fuzzer 0.1.0",
  "once_cell 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -6658,7 +6657,6 @@ dependencies = [
 "checksum lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 "checksum lazycell 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "b294d6fa9ee409a054354afc4352b0b9ef7ca222c69b8812cbea9e7d2bf3783f"
 "checksum libc 0.2.68 (registry+https://github.com/rust-lang/crates.io-index)" = "dea0c0405123bba743ee3f91f49b1c7cfb684eef0da0a50110f758ccf24cdff0"
-"checksum libfuzzer-sys 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "8d718794b8e23533b9069bd2c4597d69e41cc7ab1c02700a502971aca0cdcf24"
 "checksum libloading 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f2b111a074963af1d37a139918ac6d49ad1d0d5e47f72fd55388619691a7d753"
 "checksum librocksdb_sys 0.1.0 (git+https://github.com/tikv/rust-rocksdb.git?rev=72e45c3f3283302c825d53c3cd7154f4cd9e8f5b)" = "<none>"
 "checksum libtitan_sys 0.0.1 (git+https://github.com/tikv/rust-rocksdb.git?rev=72e45c3f3283302c825d53c3cd7154f4cd9e8f5b)" = "<none>"
