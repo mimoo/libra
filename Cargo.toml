@@ -126,4 +126,5 @@ lto = 'thin'
 debug = true
 
 [patch.crates-io]
-librocksdb_sys = { path = 'rust-rocksdb/librocksdb_sys' }
+librocksdb_sys = { path = "rust-rocksdb/librocksdb_sys" }
+rocksdb = { path = "rust-rocksdb" }
