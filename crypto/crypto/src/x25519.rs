@@ -1,6 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+// TODO: rewrite this
 //! An implementation of x25519 elliptic curve key pairs required for
 //! [Diffie-Hellman key
 //! exchange](https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange)
@@ -56,285 +57,138 @@
 //! assert_ne!(public_key1, public_key2);
 //! ```
 
-use crate::{hkdf::Hkdf, traits::*};
-use libra_crypto_derive::{Deref, DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
-use rand::{rngs::EntropyRng, RngCore};
-use sha2::Sha256;
-use std::{convert::TryFrom, ops::Deref};
+use std::convert::{TryFrom, TryInto};
 
-/// TODO: move traits to the right file (possibly traits.rs)
-
-/// Key interfaces for Diffie-Hellman key exchange protocol build on top
-/// of the key APIs in traits.rs
-
-/// x25519 implementation
-
-/// The length of the DHPublicKey
-pub const X25519_PUBLIC_KEY_LENGTH: usize = 32;
-/// The length of the DHPrivateKey
-pub const X25519_PRIVATE_KEY_LENGTH: usize = 32;
-
-/// An x25519 ephemeral private (secret) key
-#[derive(SilentDisplay, SilentDebug)]
-pub struct X25519EphemeralPrivateKey(x25519_dalek::EphemeralSecret);
-
-/// An x25519 static private (secret) key
-#[derive(Clone, DeserializeKey, SilentDisplay, SilentDebug, SerializeKey)]
-pub struct X25519StaticPrivateKey(x25519_dalek::StaticSecret);
-
-/// An x25519 public key
-#[derive(Clone, Deref)]
-pub struct X25519PublicKey(x25519_dalek::PublicKey);
-
-/// An x25519 public key to match the X25519Static key type, which
-/// dereferences to an X25519PublicKey
-#[derive(Clone, DeserializeKey, Eq, Hash, PartialEq, SerializeKey)]
-pub struct X25519StaticPublicKey(X25519PublicKey);
-
-/// An x25519 shared key
-#[derive(SilentDisplay, SilentDebug)]
-pub struct X25519SharedKey(x25519_dalek::SharedSecret);
-
-/////////////////////////
-// X25519EphemeralPrivateKey Traits //
-/////////////////////////
-
-impl Uniform for X25519EphemeralPrivateKey {
-    fn generate<R>(rng: &mut R) -> Self
-    where
-        R: ::rand::SeedableRng + ::rand::RngCore + ::rand::CryptoRng,
-    {
-        X25519EphemeralPrivateKey(x25519_dalek::EphemeralSecret::new(rng))
-    }
-}
-
-impl PrivateKey for X25519EphemeralPrivateKey {
-    type PublicKeyMaterial = X25519PublicKey;
-}
-
-impl ExchangeKey for X25519EphemeralPrivateKey {
-    type DHPublicKeyMaterial = X25519PublicKey;
-    type DHSharedKeyMaterial = X25519SharedKey;
-
-    // Diffie-Hellman exchange
-    fn dh(self, their_public: &X25519PublicKey) -> X25519SharedKey {
-        let shared_secret = self.0.diffie_hellman(&their_public.0);
-        X25519SharedKey(shared_secret)
-    }
-}
-
-//////////////////////
-// X25519StaticPrivateKey Traits //
-//////////////////////
-
-impl X25519StaticPrivateKey {
-    /// Derives a keypair `(X25519PrivateKey, X25519PublicKey)` from
-    /// a) salt (optional) - denoted as 'salt' in RFC 5869
-    /// b) seed - denoted as 'IKM' in RFC 5869
-    /// c) application info (optional) - denoted as 'info' in RFC 5869
-    ///
-    /// using the HKDF key derivation protocol, as defined in RFC 5869.
-    /// This implementation uses the full extract-then-expand HKDF steps
-    /// based on the SHA-256 hash function.
-    pub fn derive_keypair_from_seed(
-        salt: Option<&[u8]>,
-        seed: &[u8],
-        app_info: Option<&[u8]>,
-    ) -> (X25519StaticPrivateKey, X25519StaticPublicKey) {
-        let derived_bytes =
-            Hkdf::<Sha256>::extract_then_expand(salt, seed, app_info, X25519_PRIVATE_KEY_LENGTH);
-        let mut key_bytes = [0u8; X25519_PRIVATE_KEY_LENGTH];
-        key_bytes.copy_from_slice(derived_bytes.unwrap().as_slice());
-
-        let secret: x25519_dalek::StaticSecret = x25519_dalek::StaticSecret::from(key_bytes);
-        let public: x25519_dalek::PublicKey = (&secret).into();
-        (
-            X25519StaticPrivateKey(secret),
-            X25519StaticPublicKey(X25519PublicKey(public)),
-        )
-    }
-
-    /// Generates a random keypair `(PrivateKey, PublicKey)` by combining the output of `EntropyRng`
-    /// with a user-provided seed. This concatenated seed is used as the seed to HKDF (RFC 5869).
-    ///
-    /// Similarly to `derive_keypair_from_seed` the user provides the following inputs:
-    /// a) salt (optional) - denoted as 'salt' in RFC 5869
-    /// b) seed - denoted as 'IKM' in RFC 5869
-    /// c) application info (optional) - denoted as 'info' in RFC 5869
-    ///
-    /// Note that this method is not deterministic, but the (random + static seed) key
-    /// generation makes it safer against low entropy pools and weak RNGs.
-    pub fn generate_keypair_hybrid(
-        salt: Option<&[u8]>,
-        seed: &[u8],
-        app_info: Option<&[u8]>,
-    ) -> (X25519StaticPrivateKey, X25519StaticPublicKey) {
-        let mut rng = EntropyRng::new();
-        let mut seed_from_rng = [0u8; X25519_PRIVATE_KEY_LENGTH];
-        rng.fill_bytes(&mut seed_from_rng);
-
-        let mut final_seed = seed.to_vec();
-        final_seed.extend_from_slice(&seed_from_rng);
-
-        X25519StaticPrivateKey::derive_keypair_from_seed(salt, &final_seed, app_info)
-    }
-}
-
-impl Uniform for X25519StaticPrivateKey {
-    fn generate<R>(rng: &mut R) -> Self
-    where
-        R: ::rand::SeedableRng + ::rand::RngCore + ::rand::CryptoRng,
-    {
-        X25519StaticPrivateKey(x25519_dalek::StaticSecret::new(rng))
-    }
-}
-
-impl PrivateKey for X25519StaticPrivateKey {
-    type PublicKeyMaterial = X25519StaticPublicKey;
-}
-
-impl ExchangeKey for X25519StaticPrivateKey {
-    type DHPublicKeyMaterial = X25519StaticPublicKey;
-    type DHSharedKeyMaterial = X25519SharedKey;
-
-    // Diffie-Hellman exchange
-    fn dh(self, their_public: &X25519StaticPublicKey) -> X25519SharedKey {
-        let shared_secret = self.0.diffie_hellman(&(their_public.deref()).0);
-        X25519SharedKey(shared_secret)
-    }
-}
-
-impl PartialEq for X25519StaticPrivateKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_bytes() == other.to_bytes()
-    }
-}
-
-impl TryFrom<&[u8]> for X25519StaticPrivateKey {
-    type Error = CryptoMaterialError;
-    fn try_from(bytes: &[u8]) -> Result<X25519StaticPrivateKey, CryptoMaterialError> {
-        if bytes.len() != X25519_PRIVATE_KEY_LENGTH {
-            return Err(CryptoMaterialError::DeserializationError);
-        }
-        let mut bits = [0u8; X25519_PRIVATE_KEY_LENGTH];
-        bits.copy_from_slice(&bytes[..X25519_PRIVATE_KEY_LENGTH]);
-        Ok(X25519StaticPrivateKey(x25519_dalek::StaticSecret::from(
-            bits,
-        )))
-    }
-}
-
-impl Length for X25519StaticPrivateKey {
-    fn length(&self) -> usize {
-        X25519_PRIVATE_KEY_LENGTH
-    }
-}
-
-impl ValidKey for X25519StaticPrivateKey {
-    fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_bytes().to_vec()
-    }
-}
-
-//////////////////////
-// X25519PublicKey Traits //
-//////////////////////
-
-impl<'a> From<&'a X25519EphemeralPrivateKey> for X25519PublicKey {
-    fn from(ephemeral: &'a X25519EphemeralPrivateKey) -> X25519PublicKey {
-        X25519PublicKey(x25519_dalek::PublicKey::from(&ephemeral.0))
-    }
-}
-
-impl<'a> From<&'a X25519StaticPrivateKey> for X25519StaticPublicKey {
-    fn from(ephemeral: &'a X25519StaticPrivateKey) -> X25519StaticPublicKey {
-        X25519StaticPublicKey(X25519PublicKey(x25519_dalek::PublicKey::from(&ephemeral.0)))
-    }
-}
-
-impl std::hash::Hash for X25519PublicKey {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let encoded_pubkey = self.0.as_bytes();
-        state.write(encoded_pubkey);
-    }
-}
-
-impl PartialEq for X25519PublicKey {
-    fn eq(&self, other: &X25519PublicKey) -> bool {
-        *self.0.as_bytes() == *other.0.as_bytes()
-    }
-}
-
-impl Eq for X25519PublicKey {}
-
-impl PublicKey for X25519PublicKey {
-    type PrivateKeyMaterial = X25519EphemeralPrivateKey;
-}
-
-impl PublicKey for X25519StaticPublicKey {
-    type PrivateKeyMaterial = X25519StaticPrivateKey;
-}
-
-impl TryFrom<&[u8]> for X25519StaticPublicKey {
-    type Error = CryptoMaterialError;
-    fn try_from(bytes: &[u8]) -> Result<X25519StaticPublicKey, CryptoMaterialError> {
-        if bytes.len() != X25519_PUBLIC_KEY_LENGTH {
-            return Err(CryptoMaterialError::DeserializationError);
-        }
-        let mut bits = [0u8; X25519_PRIVATE_KEY_LENGTH];
-        bits.copy_from_slice(&bytes[..X25519_PRIVATE_KEY_LENGTH]);
-        Ok(X25519StaticPublicKey(X25519PublicKey(
-            x25519_dalek::PublicKey::from(bits),
-        )))
-    }
-}
-
-impl Length for X25519StaticPublicKey {
-    fn length(&self) -> usize {
-        X25519_PUBLIC_KEY_LENGTH
-    }
-}
-
-impl ValidKey for X25519StaticPublicKey {
-    fn to_bytes(&self) -> Vec<u8> {
-        self.deref().0.as_bytes().to_vec()
-    }
-}
-
-impl std::fmt::Display for X25519PublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0.as_bytes()))
-    }
-}
-
-impl std::fmt::Debug for X25519PublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "X25519PublicKey({})", self)
-    }
-}
-
-impl std::fmt::Display for X25519StaticPublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.0)
-    }
-}
-
-impl std::fmt::Debug for X25519StaticPublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "X25519StaticPublicKey({})", self)
-    }
-}
+use crate::traits::{self, ValidKey, ValidKeyStringExt};
+use libra_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 
 #[cfg(any(test, feature = "fuzzing"))]
-use proptest::prelude::*;
+use proptest_derive::Arbitrary;
 
-#[cfg(any(test, feature = "fuzzing"))]
-impl proptest::arbitrary::Arbitrary for X25519StaticPublicKey {
-    type Parameters = ();
-    type Strategy = BoxedStrategy<Self>;
+//
+// Underlying Implementation
+// =========================
+//
+// We re-export dalek-x25519 library,
+// this makes it easier to figure out what flags we want to use to build
+//
 
-    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-        crate::test_utils::uniform_keypair_strategy::<X25519StaticPrivateKey, X25519StaticPublicKey>()
-            .prop_map(|v| v.public_key).boxed()
-    }
+pub use x25519_dalek::*;
+
+//
+// Main types and constants
+// ========================
+//
+
+/// Size of a X25519 private key
+const PRIVATE_KEY_SIZE: usize = 32;
+/// Size of a X25519 public key
+const PUBLIC_KEY_SIZE: usize = 32;
+
+/// Ideally this type should be used if no cryptography is needed on a X25519 private key
+#[derive(DeserializeKey, SilentDisplay, SilentDebug, SerializeKey)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary, Clone, PartialEq))]
+pub struct PrivateKeyBytes([u8; PRIVATE_KEY_SIZE]);
+
+/// Ideally this type should be used if no cryptography is needed on a X25519 public key
+#[derive(
+  Default, Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, SerializeKey, DeserializeKey,
+)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
+pub struct PublicKeyBytes([u8; PUBLIC_KEY_SIZE]);
+
+//
+// Handy implementations
+//
+
+impl PrivateKeyBytes {
+  /// converts the wrapper into a vector of bytes
+  pub fn to_vec(&self) -> Vec<u8> {
+    self.0.to_vec()
+  }
+
+  /// obtain the public key part of this private key
+  pub fn public_key(&self) -> PublicKeyBytes {
+    let private_key: StaticSecret = self.0.into();
+    let public_key: PublicKey = (&private_key).into();
+    PublicKeyBytes(public_key.as_bytes().to_owned())
+  }
+
+  /// only used to test
+  // TODO: ideally we would gate this behind a test/testing/fuzzing flag
+  pub fn for_test(rng: &mut (impl rand::RngCore + rand::CryptoRng)) -> Self {
+    Self(StaticSecret::new(rng).to_bytes())
+  }
+}
+
+impl PublicKeyBytes {
+  // TODO: remove this, already implemented for traits
+  /// converts the wrapper into a vector of bytes
+  pub fn to_bytes(&self) -> Vec<u8> {
+    self.0.to_vec()
+  }
+
+  /// obtains a slice reference to the underlying bytearray
+  pub fn as_slice(&self) -> &[u8] {
+    &self.0
+  }
+}
+
+//
+// required for traits...
+//
+
+impl std::convert::TryFrom<&[u8]> for PrivateKeyBytes {
+  type Error = traits::CryptoMaterialError;
+
+  fn try_from(private_key_bytes: &[u8]) -> Result<Self, Self::Error> {
+    let private_key_bytes: [u8; PRIVATE_KEY_SIZE] = private_key_bytes
+      .try_into()
+      .map_err(|_| traits::CryptoMaterialError::DeserializationError)?;
+    Ok(Self(private_key_bytes))
+  }
+}
+
+impl std::convert::TryFrom<&[u8]> for PublicKeyBytes {
+  type Error = traits::CryptoMaterialError;
+
+  fn try_from(public_key_bytes: &[u8]) -> Result<Self, Self::Error> {
+    let public_key_bytes: [u8; PUBLIC_KEY_SIZE] = public_key_bytes
+      .try_into()
+      .map_err(|_| traits::CryptoMaterialError::WrongLengthError)?;
+    Ok(Self(public_key_bytes))
+  }
+}
+
+impl traits::ValidKey for PrivateKeyBytes {
+  fn to_bytes(&self) -> Vec<u8> {
+    self.0.to_vec()
+  }
+}
+
+impl traits::ValidKey for PublicKeyBytes {
+  fn to_bytes(&self) -> Vec<u8> {
+    self.0.to_vec()
+  }
+}
+
+impl traits::PrivateKey for PrivateKeyBytes {
+  type PublicKeyMaterial = PublicKeyBytes;
+}
+
+impl traits::PublicKey for PublicKeyBytes {
+  type PrivateKeyMaterial = PrivateKeyBytes;
+}
+
+impl From<&PrivateKeyBytes> for PublicKeyBytes {
+  fn from(private_key: &PrivateKeyBytes) -> Self {
+    private_key.public_key()
+  }
+}
+
+// TODO: do we need this?
+impl std::convert::From<&PublicKey> for PublicKeyBytes {
+  fn from(public_key: &PublicKey) -> Self {
+    Self(public_key.as_bytes().to_owned())
+  }
 }

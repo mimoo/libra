@@ -6,10 +6,7 @@ use crate::{
     protocols::identity::{exchange_identity, Identity},
 };
 use futures::io::{AsyncRead, AsyncWrite};
-use libra_crypto::{
-    x25519::{X25519StaticPrivateKey, X25519StaticPublicKey},
-    ValidKey,
-};
+use libra_crypto::x25519;
 use libra_security_logger::{security_log, SecurityEvent};
 use libra_types::PeerId;
 use netcore::transport::{boxed, memory, tcp, TransportExt};
@@ -75,11 +72,11 @@ fn match_peer_id(identity: Identity, peer_id: PeerId) -> Result<Identity, io::Er
 
 pub fn build_memory_noise_transport(
     own_identity: Identity,
-    identity_keypair: (X25519StaticPrivateKey, X25519StaticPublicKey),
+    identity_key: x25519::PrivateKeyBytes,
     trusted_peers: Arc<RwLock<HashMap<PeerId, NetworkPublicKeys>>>,
 ) -> boxed::BoxedTransport<(Identity, impl TSocket), impl ::std::error::Error> {
     let memory_transport = memory::MemoryTransport::default();
-    let noise_config = Arc::new(NoiseConfig::new(identity_keypair));
+    let noise_config = Arc::new(NoiseConfig::new(identity_key));
 
     memory_transport
         .and_then(move |socket, origin| async move {
@@ -101,16 +98,16 @@ pub fn build_memory_noise_transport(
 
 pub fn build_unauthenticated_memory_noise_transport(
     own_identity: Identity,
-    identity_keypair: (X25519StaticPrivateKey, X25519StaticPublicKey),
+    identity_key: x25519::PrivateKeyBytes,
 ) -> boxed::BoxedTransport<(Identity, impl TSocket), impl ::std::error::Error> {
     let memory_transport = memory::MemoryTransport::default();
-    let noise_config = Arc::new(NoiseConfig::new(identity_keypair));
+    let noise_config = Arc::new(NoiseConfig::new(identity_key));
     memory_transport
         .and_then(move |socket, origin| {
             async move {
                 let (remote_static_key, socket) =
                     noise_config.upgrade_connection(socket, origin).await?;
-                // Generate PeerId from X25519StaticPublicKey.
+                // Generate PeerId from x25519::PublicKey.
                 // Note: This is inconsistent with current types because AccountAddress is derived
                 // from consensus key which is of type Ed25519PublicKey. Since AccountAddress does
                 // not mean anything in a setting without remote authentication, we use the network
@@ -144,10 +141,10 @@ pub fn build_memory_transport(
 //TODO(bmwill) Maybe create an Either Transport so we can merge the building of Memory + Tcp
 pub fn build_tcp_noise_transport(
     own_identity: Identity,
-    identity_keypair: (X25519StaticPrivateKey, X25519StaticPublicKey),
+    identity_key: x25519::PrivateKeyBytes,
     trusted_peers: Arc<RwLock<HashMap<PeerId, NetworkPublicKeys>>>,
 ) -> boxed::BoxedTransport<(Identity, impl TSocket), impl ::std::error::Error> {
-    let noise_config = Arc::new(NoiseConfig::new(identity_keypair));
+    let noise_config = Arc::new(NoiseConfig::new(identity_key));
 
     LIBRA_TCP_TRANSPORT
         .and_then(move |socket, origin| async move {
@@ -176,15 +173,15 @@ pub fn build_tcp_noise_transport(
 // node is allowed to connect).
 pub fn build_unauthenticated_tcp_noise_transport(
     own_identity: Identity,
-    identity_keypair: (X25519StaticPrivateKey, X25519StaticPublicKey),
+    identity_key: x25519::PrivateKeyBytes,
 ) -> boxed::BoxedTransport<(Identity, impl TSocket), impl ::std::error::Error> {
-    let noise_config = Arc::new(NoiseConfig::new(identity_keypair));
+    let noise_config = Arc::new(NoiseConfig::new(identity_key));
     LIBRA_TCP_TRANSPORT
         .and_then(move |socket, origin| {
             async move {
                 let (remote_static_key, socket) =
                     noise_config.upgrade_connection(socket, origin).await?;
-                // Generate PeerId from X25519StaticPublicKey.
+                // Generate PeerId from x25519::PublicKey.
                 // Note: This is inconsistent with current types because AccountAddress is derived
                 // from consensus key which is of type Ed25519PublicKey. Since AccountAddress does
                 // not mean anything in a setting without remote authentication, we use the network

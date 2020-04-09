@@ -106,16 +106,13 @@ pub fn setup_network(config: &mut NetworkConfig, role: RoleType) -> (Runtime, Ne
             .as_mut()
             .expect("Network keypairs are not defined");
         let signing_keys = &mut network_keypairs.signing_keys;
-        let identity_keys = &mut network_keypairs.identity_keys;
-
         let signing_private = signing_keys
             .take_private()
             .expect("Failed to take Network signing private key, key absent or already read");
         let signing_public = signing_keys.public().clone();
-        let identity_private = identity_keys
-            .take_private()
-            .expect("Failed to take Network identity private key, key absent or already read");
-        let identity_public = identity_keys.public().clone();
+
+        let identity_key = network_keypairs.take_identity_key();
+
         let trusted_peers = if role == RoleType::Validator {
             // for validators, trusted_peers is empty will be populated from consensus
             HashMap::new()
@@ -123,10 +120,7 @@ pub fn setup_network(config: &mut NetworkConfig, role: RoleType) -> (Runtime, Ne
             config.network_peers.peers.clone()
         };
         network_builder
-            .transport(TransportType::TcpNoise(Some((
-                identity_private,
-                identity_public,
-            ))))
+            .transport(TransportType::TcpNoise(Some(identity_key)))
             .connectivity_check_interval_ms(config.connectivity_check_interval_ms)
             .seed_peers(seed_peers)
             .trusted_peers(trusted_peers)
@@ -134,22 +128,15 @@ pub fn setup_network(config: &mut NetworkConfig, role: RoleType) -> (Runtime, Ne
             .discovery_interval_ms(config.discovery_interval_ms)
             .add_discovery();
     } else if config.enable_noise {
-        let identity_keys = &mut config
+        let identity_key = config
             .network_keypairs
             .as_mut()
             .expect("Network keypairs are not defined")
-            .identity_keys;
-        let identity_private = identity_keys
-            .take_private()
-            .expect("Failed to take Network identity private key, key absent or already read");
-        let identity_public = identity_keys.public().clone();
+            .take_identity_key();
         // Even if a network end-point operates without remote authentication, it might want to prove
         // its identity to another peer it connects to. For this, we use TCP + Noise but without
         // enforcing a trusted peers set.
-        network_builder.transport(TransportType::TcpNoise(Some((
-            identity_private,
-            identity_public,
-        ))));
+        network_builder.transport(TransportType::TcpNoise(Some(identity_key)));
     } else {
         network_builder.transport(TransportType::Tcp);
     }

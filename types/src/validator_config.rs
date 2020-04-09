@@ -6,7 +6,7 @@ use crate::{
     account_config,
     language_storage::StructTag,
 };
-use libra_crypto::{ed25519::Ed25519PublicKey, x25519::X25519StaticPublicKey};
+use libra_crypto::{ed25519::Ed25519PublicKey, x25519};
 use move_core_types::identifier::{IdentStr, Identifier};
 use once_cell::sync::Lazy;
 use parity_multiaddr::Multiaddr;
@@ -46,8 +46,8 @@ pub struct ValidatorConfigResource {
 pub struct ValidatorConfig {
     pub consensus_pubkey: Ed25519PublicKey,
     pub validator_network_signing_pubkey: Ed25519PublicKey,
-    pub validator_network_identity_pubkey: X25519StaticPublicKey,
+    pub validator_network_identity_pubkey: x25519::PublicKeyBytes,
     pub validator_network_address: Multiaddr,
-    pub fullnodes_network_identity_pubkey: X25519StaticPublicKey,
+    pub fullnodes_network_identity_pubkey: x25519::PublicKeyBytes,
     pub fullnodes_network_address: Multiaddr,
 }
