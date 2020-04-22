@@ -8,12 +8,16 @@ use futures::{
     io::{AsyncRead, AsyncWrite},
     ready,
 };
+use libra_crypto::{noise, x25519};
 use libra_logger::prelude::*;
 use std::{
+    collections::HashMap,
     convert::TryInto,
     io,
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
+    time,
 };
 
 // Fuzzer for Noise
@@ -21,34 +25,32 @@ use std::{
 #[path = "noise_fuzzing.rs"]
 pub mod noise_fuzzing;
 
-const MAX_PAYLOAD_LENGTH: usize = u16::max_value() as usize; // 65535
-
 // The maximum number of bytes that we can buffer is 16 bytes less than u16::max_value() because
 // encrypted messages include a tag along with the payload.
-const MAX_WRITE_BUFFER_LENGTH: usize = u16::max_value() as usize - 16; // 65519
+const MAX_WRITE_BUFFER_LENGTH: usize = u16::max_value() as usize - noise::AES_GCM_TAGLEN; // 65519
 
 /// Collection of buffers used for buffering data during the various read/write states of a
 /// NoiseSocket
 struct NoiseBuffers {
     /// Encrypted frame read from the wire
-    read_encrypted: [u8; MAX_PAYLOAD_LENGTH],
+    read_encrypted: [u8; noise::MAX_SIZE_NOISE_MSG],
     /// Decrypted data read from the wire (produced by having snow decrypt the `read_encrypted`
     /// buffer)
-    read_decrypted: [u8; MAX_PAYLOAD_LENGTH],
+    read_decrypted: [u8; noise::MAX_SIZE_NOISE_MSG],
     /// Unencrypted data intended to be written to the wire
     write_decrypted: [u8; MAX_WRITE_BUFFER_LENGTH],
     /// Encrypted data to write to the wire (produced by having snow encrypt the `write_decrypted`
     /// buffer)
-    write_encrypted: [u8; MAX_PAYLOAD_LENGTH],
+    write_encrypted: [u8; noise::MAX_SIZE_NOISE_MSG],
 }
 
 impl NoiseBuffers {
     fn new() -> Self {
         Self {
-            read_encrypted: [0; MAX_PAYLOAD_LENGTH],
-            read_decrypted: [0; MAX_PAYLOAD_LENGTH],
+            read_encrypted: [0; noise::MAX_SIZE_NOISE_MSG],
+            read_decrypted: [0; noise::MAX_SIZE_NOISE_MSG],
             write_decrypted: [0; MAX_WRITE_BUFFER_LENGTH],
-            write_encrypted: [0; MAX_PAYLOAD_LENGTH],
+            write_encrypted: [0; noise::MAX_SIZE_NOISE_MSG],
         }
     }
 }
@@ -74,7 +76,7 @@ enum ReadState {
     /// End of file reached, result indicated if EOF was expected or not
     Eof(Result<(), ()>),
     /// Decryption Error
-    DecryptionError(snow::error::Error),
+    DecryptionError(noise::NoiseError),
 }
 
 /// Possible write states for a [NoiseSocket]
@@ -97,57 +99,7 @@ enum WriteState {
     /// End of file reached
     Eof,
     /// Encryption Error
-    EncryptionError(snow::error::Error),
-}
-
-/// Session mode for snow
-#[derive(Debug)]
-enum Session {
-    Handshake(Box<snow::HandshakeState>),
-    Transport(Box<snow::TransportState>),
-}
-
-impl Session {
-    pub fn is_initiator(&self) -> bool {
-        match self {
-            Session::Handshake(ref session) => session.is_initiator(),
-            Session::Transport(ref session) => session.is_initiator(),
-        }
-    }
-
-    pub fn read_message(
-        &mut self,
-        message: &[u8],
-        payload: &mut [u8],
-    ) -> Result<usize, snow::error::Error> {
-        match self {
-            Session::Handshake(ref mut session) => session.read_message(message, payload),
-            Session::Transport(ref mut session) => session.read_message(message, payload),
-        }
-    }
-
-    pub fn write_message(
-        &mut self,
-        message: &[u8],
-        payload: &mut [u8],
-    ) -> Result<usize, snow::error::Error> {
-        match self {
-            Session::Handshake(ref mut session) => session.write_message(message, payload),
-            Session::Transport(ref mut session) => session.write_message(message, payload),
-        }
-    }
-
-    pub fn into_transport_mode(self) -> Result<snow::TransportState, io::Error> {
-        match self {
-            Session::Handshake(session) => session
-                .into_transport_mode()
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Noise error: {}", e))),
-            Session::Transport(_) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Session not in handshake state".to_string(),
-            )),
-        }
-    }
+    EncryptionError(noise::NoiseError),
 }
 
 /// A Noise session with a remote
@@ -158,33 +110,46 @@ impl Session {
 #[derive(Debug)]
 pub struct NoiseSocket<TSocket> {
     socket: TSocket,
-    session: Session,
+    session: noise::NoiseSession,
     buffers: Box<NoiseBuffers>,
     read_state: ReadState,
     write_state: WriteState,
 }
 
 impl<TSocket> NoiseSocket<TSocket> {
-    fn new(socket: TSocket, session: snow::HandshakeState) -> Self {
+    pub fn new(socket: TSocket, session: noise::NoiseSession) -> Self {
         Self {
             socket,
-            session: Session::Handshake(Box::new(session)),
+            session,
             buffers: Box::new(NoiseBuffers::new()),
             read_state: ReadState::Init,
             write_state: WriteState::Init,
         }
     }
-
-    /// Pull out the static public key of the remote
-    pub fn get_remote_static(&self) -> Option<&[u8]> {
-        match self.session {
-            Session::Handshake(ref session) => session.get_remote_static(),
-            Session::Transport(ref session) => session.get_remote_static(),
+    /*
+        /// Pull out the static public key of the remote
+        pub fn get_remote_static(&self) -> Option<&[u8]> {
+            self.session.get_remote_static()
         }
+    */
+    pub fn read_message(
+        &mut self,
+        message: &[u8],
+        payload: &mut [u8],
+    ) -> Result<usize, noise::NoiseError> {
+        self.session.read_message(message, payload)
+    }
+
+    pub fn write_message(
+        &mut self,
+        message: &[u8],
+        payload: &mut [u8],
+    ) -> Result<usize, noise::NoiseError> {
+        self.session.write_message(message, payload)
     }
 }
 
-fn poll_write_all<TSocket>(
+pub fn poll_write_all<TSocket>(
     mut context: &mut Context,
     mut socket: Pin<&mut TSocket>,
     buf: &[u8],
@@ -234,7 +199,7 @@ where
     }
 }
 
-fn poll_read_exact<TSocket>(
+pub fn poll_read_exact<TSocket>(
     mut context: &mut Context,
     mut socket: Pin<&mut TSocket>,
     buf: &mut [u8],
@@ -557,81 +522,9 @@ where
     }
 }
 
-/// Represents a noise session which still needs to have a handshake performed.
-pub(super) struct Handshake<TSocket>(NoiseSocket<TSocket>);
-
-impl<TSocket> Handshake<TSocket> {
-    /// Build a new `Handshake` struct given a socket and a new snow HandshakeState
-    pub fn new(socket: TSocket, session: snow::HandshakeState) -> Self {
-        let noise_socket = NoiseSocket::new(socket, session);
-        Self(noise_socket)
-    }
-}
-
-impl<TSocket> Handshake<TSocket>
-where
-    TSocket: AsyncRead + AsyncWrite + Unpin,
-{
-    /// Perform a Single Round-Trip noise IX handshake returning the underlying [NoiseSocket]
-    /// (switched to transport mode) upon success.
-    pub async fn handshake_1rt(mut self) -> io::Result<NoiseSocket<TSocket>> {
-        // The Dialer
-        if self.0.session.is_initiator() {
-            // -> e, s
-            self.send().await?;
-            self.flush().await?;
-
-            // <- e, ee, se, s, es
-            self.receive().await?;
-        } else {
-            // -> e, s
-            self.receive().await?;
-
-            // <- e, ee, se, s, es
-            self.send().await?;
-            self.flush().await?;
-        }
-
-        self.finish()
-    }
-
-    /// Send handshake message to remote.
-    async fn send(&mut self) -> io::Result<()> {
-        poll_fn(|context| self.0.poll_write(context, &[]))
-            .await
-            .map(|_| ())
-    }
-
-    /// Flush handshake message to remote.
-    async fn flush(&mut self) -> io::Result<()> {
-        poll_fn(|context| self.0.poll_flush(context)).await
-    }
-
-    /// Receive handshake message from remote.
-    async fn receive(&mut self) -> io::Result<()> {
-        poll_fn(|context| self.0.poll_read(context, &mut []))
-            .await
-            .map(|_| ())
-    }
-
-    /// Finish the handshake.
-    ///
-    /// Converts the noise session into transport mode and returns the NoiseSocket.
-    fn finish(self) -> io::Result<NoiseSocket<TSocket>> {
-        let session = self.0.session.into_transport_mode()?;
-        Ok(NoiseSocket {
-            session: Session::Transport(Box::new(session)),
-            ..self.0
-        })
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use crate::{
-        socket::{Handshake, NoiseSocket, MAX_PAYLOAD_LENGTH},
-        NOISE_PARAMETER,
-    };
+    use crate::socket::{noise::MAX_SIZE_NOISE_MSG, Handshake, NoiseSocket};
     use futures::{
         executor::block_on,
         future::join,
@@ -646,7 +539,7 @@ mod test {
             (Keypair, Handshake<MemorySocket>),
             (Keypair, Handshake<MemorySocket>),
         ),
-        snow::error::Error,
+        noise::NoiseError,
     > {
         let parameters: NoiseParams = NOISE_PARAMETER.parse().expect("Invalid protocol name");
 
@@ -676,8 +569,7 @@ mod test {
         dialer: Handshake<MemorySocket>,
         listener: Handshake<MemorySocket>,
     ) -> io::Result<(NoiseSocket<MemorySocket>, NoiseSocket<MemorySocket>)> {
-        let (dialer_result, listener_result) =
-            block_on(join(dialer.handshake_1rt(), listener.handshake_1rt()));
+        let (dialer_result, listener_result) = block_on(join(dialer.dial(), listener.accept()));
 
         Ok((dialer_result?, listener_result?))
     }
@@ -756,11 +648,11 @@ mod test {
 
         let (mut a, mut b) = perform_handshake(dialer, listener)?;
 
-        let buf_send = [1; MAX_PAYLOAD_LENGTH];
+        let buf_send = [1; noise::MAX_SIZE_NOISE_MSG];
         block_on(a.write_all(&buf_send))?;
         block_on(a.flush())?;
 
-        let mut buf_receive = [0; MAX_PAYLOAD_LENGTH];
+        let mut buf_receive = [0; noise::MAX_SIZE_NOISE_MSG];
         block_on(b.read_exact(&mut buf_receive))?;
         assert_eq!(&buf_receive[..], &buf_send[..]);
 
