@@ -3,6 +3,7 @@
 
 use crate::{
     common::NetworkPublicKeys,
+    noise_wrapper::NoiseWrapper,
     protocols::{
         identity::{exchange_handshake, exchange_peerid},
         wire::handshake::v1::{HandshakeMsg, MessagingProtocolVersion, SupportedProtocols},
@@ -15,7 +16,6 @@ use libra_network_address::NetworkAddress;
 use libra_security_logger::{security_log, SecurityEvent};
 use libra_types::PeerId;
 use netcore::transport::{boxed, memory, tcp, ConnectionOrigin, TransportExt};
-use noise::NoiseConfig;
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
@@ -213,19 +213,35 @@ pub fn build_memory_noise_transport(
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
     let memory_transport = memory::MemoryTransport::default();
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     memory_transport
-        .and_then(move |socket, _addr, origin| async move {
+        .and_then(move |socket, addr, origin| async move {
+            let remote_public_key = match addr.find_noise_proto() {
+                Some(public_key) => public_key,
+                None => return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "SHOULD NOT HAPPEN: remote public key not found",
+                )),
+            };
             let (remote_static_key, socket) =
-                noise_config.upgrade_connection(socket, origin).await?;
+                noise_config.upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers)).await?;
 
             // TODO(philiphayes): reenable after seed peers are always fully rendered
             // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;
+            if remote_static_key != remote_public_key {
+                if cfg!(test) {
+                    unreachable!();
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "SHOULD NOT HAPPEN: wrong public key received",
+                ));
+            }
 
-            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key) {
+            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, remote_static_key.as_slice()) {
                 Ok((peer_id, socket))
             } else {
                 Err(io::Error::new(io::ErrorKind::Other, "Not a trusted peer"))
@@ -243,15 +259,22 @@ pub fn build_unauthenticated_memory_noise_transport(
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
     let memory_transport = memory::MemoryTransport::default();
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     memory_transport
-        .and_then(move |socket, _addr, origin| {
+        .and_then(move |socket, addr, origin| {
             async move {
+                let remote_public_key = match addr.find_noise_proto() {
+                    Some(public_key) => public_key,
+                    None => return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SHOULD NOT HAPPEN: remote public key not found",
+                    )),
+                };
                 let (remote_static_key, socket) =
-                    noise_config.upgrade_connection(socket, origin).await?;
+                    noise_config.upgrade_connection(socket, origin, remote_public_key, None).await?;
 
                 // TODO(philiphayes): reenable after seed peers are always fully rendered
                 // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;
@@ -263,7 +286,7 @@ pub fn build_unauthenticated_memory_noise_transport(
                 // public key to generate a peer_id for the peer. The only reason this works is
                 // that both are 32 bytes in size. If/when this condition no longer holds, we will
                 // receive an error.
-                let peer_id = PeerId::try_from(remote_static_key).unwrap();
+                let peer_id = PeerId::try_from(remote_static_key.as_slice()).unwrap();
                 Ok((peer_id, socket))
             }
         })
@@ -299,19 +322,26 @@ pub fn build_tcp_noise_transport(
     trusted_peers: Arc<RwLock<HashMap<PeerId, NetworkPublicKeys>>>,
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     LIBRA_TCP_TRANSPORT
         .and_then(move |socket, _addr, origin| async move {
+            let remote_public_key = match addr.find_noise_proto() {
+                Some(public_key) => public_key,
+                None => return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "SHOULD NOT HAPPEN: remote public key not found",
+                )),
+            };
             let (remote_static_key, socket) =
-                noise_config.upgrade_connection(socket, origin).await?;
+                noise_config.upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers)).await?;
 
             // TODO(philiphayes): reenable after seed peers are always fully rendered
             // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;
 
-            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key) {
+            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key.as_slice()) {
                 Ok((peer_id, socket))
             } else {
                 security_log(SecurityEvent::InvalidNetworkPeer)
@@ -335,15 +365,22 @@ pub fn build_unauthenticated_tcp_noise_transport(
     identity_key: x25519::PrivateKey,
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     LIBRA_TCP_TRANSPORT
         .and_then(move |socket, _addr, origin| {
             async move {
+                let remote_public_key = match addr.find_noise_proto() {
+                    Some(public_key) => public_key,
+                    None => return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SHOULD NOT HAPPEN: remote public key not found",
+                    )),
+                };
                 let (remote_static_key, socket) =
-                    noise_config.upgrade_connection(socket, origin).await?;
+                    noise_config.upgrade_connection(socket, origin, remote_public_key, None).await?;
 
                 // TODO(philiphayes): reenable after seed peers are always fully rendered
                 // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;
@@ -355,7 +392,7 @@ pub fn build_unauthenticated_tcp_noise_transport(
                 // public key to generate a peer_id for the peer. The only reason this works is that
                 // both are 32 bytes in size. If/when this condition no longer holds, we will receive
                 // an error.
-                let peer_id = PeerId::try_from(remote_static_key).unwrap();
+                let peer_id = PeerId::try_from(remote_static_key.as_slice()).unwrap();
                 Ok((peer_id, socket))
             }
         })
