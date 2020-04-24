@@ -15,7 +15,7 @@ use libra_network_address::NetworkAddress;
 use libra_security_logger::{security_log, SecurityEvent};
 use libra_types::PeerId;
 use netcore::transport::{boxed, memory, tcp, ConnectionOrigin, TransportExt};
-use noise::NoiseConfig;
+use noise_wrapper::NoiseWrapper;
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
@@ -183,14 +183,29 @@ pub fn build_memory_noise_transport(
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
     let memory_transport = memory::MemoryTransport::default();
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     memory_transport
         .and_then(move |socket, _addr, origin| async move {
-            let (remote_static_key, socket) =
-                noise_config.upgrade_connection(socket, origin).await?;
+            // dummy public key
+            // TODO: OF COURSE REMOVE THIS
+            let remote_public_key = x25519::PublicKey::from([0u8; 32]);
+            let (remote_static_key, socket) = noise_config
+                .upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers))
+                .await?;
+
+            if remote_static_key != remote_public_key {
+                if cfg!(test) {
+                    unreachable!();
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "SHOULD NOT HAPPEN: wrong public key received",
+                ));
+            }
+
             if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key) {
                 Ok((peer_id, socket))
             } else {
@@ -209,15 +224,18 @@ pub fn build_unauthenticated_memory_noise_transport(
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
     let memory_transport = memory::MemoryTransport::default();
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     memory_transport
         .and_then(move |socket, _addr, origin| {
             async move {
-                let (remote_static_key, socket) =
-                    noise_config.upgrade_connection(socket, origin).await?;
+                // TODO: DONT DO THIS
+                let remote_public_key = x25519::PublicKey::from([0u8; 32]);
+                let (remote_static_key, socket) = noise_config
+                    .upgrade_connection(socket, origin, remote_public_key, None)
+                    .await?;
                 // Generate PeerId from x25519::PublicKey.
                 // Note: This is inconsistent with current types because AccountAddress is derived
                 // from consensus key which is of type Ed25519PublicKey. Since AccountAddress does
@@ -261,14 +279,18 @@ pub fn build_tcp_noise_transport(
     trusted_peers: Arc<RwLock<HashMap<PeerId, NetworkPublicKeys>>>,
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     LIBRA_TCP_TRANSPORT
         .and_then(move |socket, _addr, origin| async move {
-            let (remote_static_key, socket) =
-                noise_config.upgrade_connection(socket, origin).await?;
+            // TODO: DONT DO THIS
+            let remote_public_key = x25519::PublicKey::from([0u8; 32]);
+            let (remote_static_key, socket) = noise_config
+                .upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers))
+                .await?;
+
             if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key) {
                 Ok((peer_id, socket))
             } else {
@@ -293,15 +315,19 @@ pub fn build_unauthenticated_tcp_noise_transport(
     identity_key: x25519::PrivateKey,
     application_protocols: SupportedProtocols,
 ) -> boxed::BoxedTransport<Connection<impl TSocket>, impl ::std::error::Error> {
-    let noise_config = Arc::new(NoiseConfig::new(identity_key));
+    let noise_config = Arc::new(NoiseWrapper::new(identity_key));
     let mut own_handshake = HandshakeMsg::new();
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     LIBRA_TCP_TRANSPORT
         .and_then(move |socket, _addr, origin| {
             async move {
-                let (remote_static_key, socket) =
-                    noise_config.upgrade_connection(socket, origin).await?;
+                // TODO: DONT DO THIS
+                let remote_public_key = x25519::PublicKey::from([0u8; 32]);
+                let (remote_static_key, socket) = noise_config
+                    .upgrade_connection(socket, origin, remote_public_key, None)
+                    .await?;
+
                 // Generate PeerId from x25519::PublicKey.
                 // Note: This is inconsistent with current types because AccountAddress is derived
                 // from consensus key which is of type Ed25519PublicKey. Since AccountAddress does
