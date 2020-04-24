@@ -98,6 +98,7 @@ pub struct DummyNetwork {
 
 /// The following sets up a 2 peer network and verifies connectivity.
 pub fn setup_network() -> DummyNetwork {
+    println!("setup_network()");
     let runtime = Runtime::new().unwrap();
     let dialer_peer_id = PeerId::random();
     let listener_peer_id = PeerId::random();
@@ -140,6 +141,7 @@ pub fn setup_network() -> DummyNetwork {
     .collect();
 
     // Set up the listener network
+    println!("setup listener network()");
     let mut network_builder = NetworkBuilder::new(
         runtime.handle().clone(),
         listener_peer_id,
@@ -172,12 +174,15 @@ pub fn setup_network() -> DummyNetwork {
         .add_connectivity_manager();
     let (dialer_sender, mut dialer_events) = add_to_network(&mut network_builder);
     let _dialer_addr = network_builder.build();
+    println!("setup dialer network()");
 
     // Wait for establishing connection
     let first_dialer_event = block_on(dialer_events.next()).unwrap().unwrap();
     assert_eq!(first_dialer_event, Event::NewPeer(listener_peer_id));
+    println!("dialer_events.next() done");
     let first_listener_event = block_on(listener_events.next()).unwrap().unwrap();
     assert_eq!(first_listener_event, Event::NewPeer(dialer_peer_id));
+    println!("listener_events.next() done");
 
     DummyNetwork {
         runtime,

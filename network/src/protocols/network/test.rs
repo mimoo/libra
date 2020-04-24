@@ -15,7 +15,9 @@ fn test_network_builder() {
 #[test]
 fn test_direct_send() {
     ::libra_logger::Logger::new().environment_only(true).init();
+    println!("setting up");
     let mut tn = setup_network();
+    println!("set up");
     let dialer_peer_id = tn.dialer_peer_id;
     let mut dialer_events = tn.dialer_events;
     let mut dialer_sender = tn.dialer_sender;
@@ -54,7 +56,9 @@ fn test_direct_send() {
         }
     };
 
+    println!("blocking up");
     tn.runtime.block_on(join(f_dialer, f_listener));
+    println!("done");
 }
 
 #[test]
