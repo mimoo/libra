@@ -1,14 +1,14 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::FuzzTargetImpl;
+use crate::FuzzByteArray;
 use libra_proptest_helpers::ValueGenerator;
 use noise::noise_fuzzing::{fuzz_responder, generate_corpus};
 
 #[derive(Clone, Debug, Default)]
 pub struct NetworkNoiseResponder;
 
-impl FuzzTargetImpl for NetworkNoiseResponder {
+impl FuzzByteArray for NetworkNoiseResponder {
     fn name(&self) -> &'static str {
         module_name!()
     }

@@ -1,7 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::FuzzTargetImpl;
+use crate::FuzzByteArray;
 use anyhow::{bail, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use libra_proptest_helpers::ValueGenerator;
@@ -14,7 +14,7 @@ use std::io::Cursor;
 #[derive(Clone, Debug, Default)]
 pub struct ValueTarget;
 
-impl FuzzTargetImpl for ValueTarget {
+impl FuzzByteArray for ValueTarget {
     fn name(&self) -> &'static str {
         module_name!()
     }

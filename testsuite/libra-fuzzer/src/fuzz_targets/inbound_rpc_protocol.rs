@@ -1,14 +1,14 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::FuzzTargetImpl;
+use crate::FuzzByteArray;
 use libra_proptest_helpers::ValueGenerator;
 use network::protocols::rpc;
 
 #[derive(Clone, Debug, Default)]
 pub struct RpcInboundRequest;
 
-impl FuzzTargetImpl for RpcInboundRequest {
+impl FuzzByteArray for RpcInboundRequest {
     fn name(&self) -> &'static str {
         module_name!()
     }

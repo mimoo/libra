@@ -1,14 +1,14 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::FuzzTargetImpl;
+use crate::FuzzByteArray;
 use libra_json_rpc::fuzzing::{fuzzer, generate_corpus};
 use libra_proptest_helpers::ValueGenerator;
 
 #[derive(Clone, Debug, Default)]
 pub struct JsonRpcSubmitTransactionRequest;
 
-impl FuzzTargetImpl for JsonRpcSubmitTransactionRequest {
+impl FuzzByteArray for JsonRpcSubmitTransactionRequest {
     fn name(&self) -> &'static str {
         module_name!()
     }

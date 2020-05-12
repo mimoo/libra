@@ -1,7 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::FuzzTargetImpl;
+use crate::FuzzByteArray;
 use libra_proptest_helpers::ValueGenerator;
 use libra_types::transaction::SignedTransaction;
 use proptest::prelude::*;
@@ -9,7 +9,7 @@ use proptest::prelude::*;
 #[derive(Clone, Debug, Default)]
 pub struct SignedTransactionTarget;
 
-impl FuzzTargetImpl for SignedTransactionTarget {
+impl FuzzByteArray for SignedTransactionTarget {
     fn name(&self) -> &'static str {
         module_name!()
     }

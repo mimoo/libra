@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Helpers for fuzz testing.
 
-use libra_fuzzer::{commands, FuzzTarget};
+use libra_fuzzer::{commands, FuzzType};
 use once_cell::sync::Lazy;
 use std::{env, ffi::OsString, fs, path::PathBuf};
 use structopt::StructOpt;
@@ -42,14 +42,14 @@ enum Command {
         corpus_dir: Option<PathBuf>,
         #[structopt(name = "TARGET")]
         /// Name of target to generate (use `list` to list)
-        target: FuzzTarget,
+        target: FuzzType,
     },
     /// Run fuzzer on specified target (must be run under `cargo run`)
     #[structopt(name = "fuzz", usage = "fuzzer fuzz <TARGET> -- [ARGS]")]
     Fuzz {
         /// Target to fuzz (use `list` to list targets)
         #[structopt(name = "TARGET", required = true)]
-        target: FuzzTarget,
+        target: FuzzType,
         /// Custom directory for corpus
         #[structopt(long = "corpus-dir", parse(from_os_str))]
         corpus_dir: Option<PathBuf>,
@@ -70,16 +70,16 @@ enum Command {
 }
 
 /// The default directory for corpuses. Also return whether the directory was freshly created.
-fn default_corpus_dir(target: FuzzTarget) -> (PathBuf, bool) {
+fn default_corpus_dir(target: FuzzType) -> (PathBuf, bool) {
     default_dir(target, "corpus")
 }
 
 /// The default directory for artifacts.
-fn default_artifact_dir(target: FuzzTarget) -> PathBuf {
+fn default_artifact_dir(target: FuzzType) -> PathBuf {
     default_dir(target, "artifacts").0
 }
 
-fn default_dir(target: FuzzTarget, intermediate_dir: &str) -> (PathBuf, bool) {
+fn default_dir(target: FuzzType, intermediate_dir: &str) -> (PathBuf, bool) {
     let mut dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect(
         "--corpus-dir not set and this binary is not running under cargo run. \
          Either use cargo run or pass in the --corpus-dir flag.",

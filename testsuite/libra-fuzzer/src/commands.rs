@@ -31,12 +31,19 @@ pub fn make_corpus(
 
     let mut idx = 0;
     while idx < num_items {
-        let result = match target.generate(idx, &mut gen) {
-            Some(bytes) => bytes,
-            None => {
-                // No value could be generated. Assume that corpus generation has been exhausted.
-                break;
-            }
+        let result = match target {
+            FuzzTarget::ByteArray(target) => {
+                match target.generate(idx, &mut gen) {
+                    Some(bytes) => bytes,
+                    None => {
+                        // No value could be generated. Assume that corpus generation has been exhausted.
+                        break;
+                    }
+                }
+            },
+            FuzzTarget::StructuredData(target) => {
+                target.generate()
+            },
         };
 
         // Use the SHA-1 of the result as the file name.
@@ -64,7 +71,11 @@ pub fn fuzz_target(
     artifact_dir: PathBuf,
     mut args: Vec<OsString>,
 ) -> Result<()> {
-    static FUZZ_RUNNER: &str = "fuzz_runner";
+    // target indicates the type of fuzz target
+    let fuzz_runner = match target {
+        FuzzTarget::ByteArray(_) => "fuzz_runner",
+        FuzzTarget::StructuredData(_) => "structured_fuzz_runner",
+    };
 
     // Do a bit of arg parsing -- look for a "--" and insert the target and corpus directory
     // before that.
@@ -72,7 +83,7 @@ pub fn fuzz_target(
     let splice_pos = dash_dash_pos.unwrap_or_else(|| args.len());
     args.splice(
         splice_pos..splice_pos,
-        vec![FUZZ_RUNNER.into(), corpus_dir.into()],
+        vec![fuzz_runner.into(), corpus_dir.into()],
     );
 
     // The artifact dir goes at the end.
