@@ -1,11 +1,12 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! Noise Socket
+//! The socket module implements the post-handshake part of the protocol.
+//! Its main type (`NoiseSocket`) is returned after a successful [handshake].
+//! functions in this module enables encrypting and decrypting messages from a socket.
+//! Note that since noise is length-unaware, we have to prefix every noise message with its length
 //!
-//! This code is helpful to read and write Noise messages on a socket.
-//! Since Noise messages are variable-length, we prefix them with
-//!
+//! [handshake]: crate::handshake
 
 use futures::{
     io::{AsyncRead, AsyncWrite},

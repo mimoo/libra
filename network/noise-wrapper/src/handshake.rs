@@ -1,6 +1,15 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+
+//! The handshake module implements the handshake part of the protocol.
+//! This module also implements additional anti-DoS mitigation, 
+//! by including a timestamp in each handshake initialization message.
+//! Refer to the module's documentation for more information.
+//! A successful handshake returns a `NoiseSocket` which is defined in [socket] module.
+//!
+//! [socket]: crate::socket
+
 use futures::{
   future::poll_fn,
   io::{AsyncRead, AsyncWrite},
@@ -24,6 +33,8 @@ use netcore::{
 use libra_logger::prelude::*;
 
 use crate::socket::{poll_read_exact, poll_write_all, NoiseSocket};
+
+
 
 // Timestamp
 // --------
@@ -332,3 +343,86 @@ impl NoiseWrapper {
         Ok(NoiseSocket::new(socket, session))
     }
 }
+
+
+//
+// Tests
+// -----
+//
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use crate::handshake::NoiseWrapper;
+    use futures::{
+        executor::block_on,
+        future::join,
+        io::{AsyncReadExt, AsyncWriteExt},
+    };
+    use libra_crypto::{test_utils::TEST_SEED, x25519};
+    use memsocket::MemorySocket;
+    use std::io;
+    use std::sync::{Arc, RwLock};
+    use std::collections::HashMap;
+    use libra_types::PeerId;
+    use libra_config::config::NetworkPeerInfo;
+
+    use rand::SeedableRng as _;
+    use libra_crypto::traits::Uniform as _;
+
+    // TODO: move the handshake tests to handshake.rs
+
+    /// helper to setup two testing peers
+    fn build_peers() -> (
+        (NoiseWrapper, x25519::PublicKey),
+        (NoiseWrapper, x25519::PublicKey),
+    ) {
+        let mut rng = ::rand::rngs::StdRng::from_seed(TEST_SEED);
+
+        let client_private = x25519::PrivateKey::generate(&mut rng);
+        let client_public = client_private.public_key();
+
+        let server_private = x25519::PrivateKey::generate(&mut rng);
+        let server_public = server_private.public_key();
+
+        let client = NoiseWrapper::new(client_private);
+        let server = NoiseWrapper::new(server_private);
+
+        (
+            (client, client_public),
+            (server, server_public),
+        )
+    }
+
+    /// helper to perform a noise handshake with two peers
+    fn perform_handshake(
+        client: NoiseWrapper,
+        server_public_key: x25519::PublicKey,
+        server: NoiseWrapper,
+        trusted_peers: Option<&Arc<RwLock<HashMap<PeerId, NetworkPeerInfo>>>>,
+    ) -> io::Result<(NoiseSocket<MemorySocket>, NoiseSocket<MemorySocket>)> {
+        // create an in-memory socket for testing
+        let (dialer_socket, listener_socket) = MemorySocket::new_pair();
+
+        // perform the handshake
+        let (client_session, server_session) = block_on(join(
+            client.dial(dialer_socket, server_public_key),
+            server.accept(listener_socket, trusted_peers),
+        ));
+
+        //
+        Ok((client_session?, server_session?))
+    }
+
+    #[test]
+    fn test_handshake() {
+        // perform handshake with two testing peers
+        let ((client, client_public), (server, server_public)) =
+            build_peers();
+        let (client, server) = perform_handshake(client, server_public, server, None).unwrap();
+
+        assert_eq!(client.get_remote_static(), server_public,);
+        assert_eq!(server.get_remote_static(), client_public,);
+    }
+  }
