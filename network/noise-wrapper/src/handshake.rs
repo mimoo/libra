@@ -30,7 +30,6 @@ use netcore::{
   negotiate::{negotiate_inbound, negotiate_outbound_interactive},
   transport::ConnectionOrigin,
 };
-use libra_logger::prelude::*;
 
 use crate::socket::{poll_read_exact, poll_write_all, NoiseSocket};
 
