@@ -327,7 +327,7 @@ pub fn build_tcp_noise_transport(
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     LIBRA_TCP_TRANSPORT
-        .and_then(move |socket, _addr, origin| async move {
+        .and_then(move |socket, addr, origin| async move {
             let remote_public_key = match addr.find_noise_proto() {
                 Some(public_key) => public_key,
                 None => return Err(io::Error::new(
@@ -370,7 +370,7 @@ pub fn build_unauthenticated_tcp_noise_transport(
     own_handshake.add(SUPPORTED_MESSAGING_PROTOCOL, application_protocols);
 
     LIBRA_TCP_TRANSPORT
-        .and_then(move |socket, _addr, origin| {
+        .and_then(move |socket, addr, origin| {
             async move {
                 let remote_public_key = match addr.find_noise_proto() {
                     Some(public_key) => public_key,
