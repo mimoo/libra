@@ -22,7 +22,11 @@ mod counters;
 mod peer;
 mod sink;
 mod transport;
+
+#[cfg(not(feature="testing"))]
 mod noise_wrapper;
+#[cfg(feature="testing")]
+pub mod noise_wrapper;
 
 pub type DisconnectReason = peer::DisconnectReason;
 pub type ConnectivityRequest = connectivity_manager::ConnectivityRequest;

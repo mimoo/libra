@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The socket module implements the post-handshake part of the protocol.
-//! Its main type (`NoiseSocket`) is returned after a successful [handshake].
+//! Its main type (`NoiseSession`) is returned after a successful [handshake].
 //! functions in this module enables encrypting and decrypting messages from a socket.
 //! Note that since noise is length-unaware, we have to prefix every noise message with its length
 //!
@@ -23,7 +23,7 @@ use libra_crypto::{noise, x25519};
 use libra_logger::prelude::*;
 
 //
-// NoiseSocket
+// NoiseSession
 // -----------
 //
 
@@ -33,7 +33,7 @@ use libra_logger::prelude::*;
 /// the noise protocol. This is done by wrapping noise payloads in u16 (big endian) length prefix
 /// frames.
 #[derive(Debug)]
-pub struct NoiseSocket<TSocket> {
+pub struct NoiseSession<TSocket> {
     /// the socket we write to and read from
     socket: TSocket,
     /// the noise stack
@@ -46,8 +46,8 @@ pub struct NoiseSocket<TSocket> {
     write_state: WriteState,
 }
 
-impl<TSocket> NoiseSocket<TSocket> {
-    /// Create a NoiseSocket from a socket and a noise post-handshake session
+impl<TSocket> NoiseSession<TSocket> {
+    /// Create a NoiseSession from a socket and a noise post-handshake session
     pub fn new(socket: TSocket, session: noise::NoiseSession) -> Self {
         Self {
             socket,
@@ -81,7 +81,7 @@ impl<TSocket> NoiseSocket<TSocket> {
 // read parts
 // ----------
 
-/// Possible read states for a [NoiseSocket]
+/// Possible read states for a [NoiseSession]
 #[derive(Debug)]
 enum ReadState {
     /// Initial State
@@ -98,13 +98,13 @@ enum ReadState {
     DecryptionError(noise::NoiseError),
 }
 
-impl<TSocket> NoiseSocket<TSocket>
+impl<TSocket> NoiseSession<TSocket>
 where
     TSocket: AsyncRead + Unpin,
 {
     fn poll_read(&mut self, mut context: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         loop {
-            trace!("NoiseSocket ReadState::{:?}", self.read_state);
+            trace!("NoiseSession ReadState::{:?}", self.read_state);
             match self.read_state {
                 ReadState::Init => {
                     self.read_state = ReadState::ReadFrameLen {
@@ -218,7 +218,7 @@ where
 // -----------
 //
 
-/// Possible write states for a [NoiseSocket]
+/// Possible write states for a [NoiseSession]
 #[derive(Debug)]
 enum WriteState {
     /// Initial State
@@ -241,7 +241,7 @@ enum WriteState {
     EncryptionError(noise::NoiseError),
 }
 
-impl<TSocket> NoiseSocket<TSocket>
+impl<TSocket> NoiseSession<TSocket>
 where
     TSocket: AsyncWrite + Unpin,
 {
@@ -252,7 +252,7 @@ where
     ) -> Poll<io::Result<Option<usize>>> {
         loop {
             trace!(
-                "NoiseSocket {} WriteState::{:?}",
+                "NoiseSession {} WriteState::{:?}",
                 if buf.is_some() {
                     "poll_write"
                 } else {
@@ -396,9 +396,9 @@ where
     }
 }
 
-// trait implementations for NoiseSocket
+// trait implementations for NoiseSession
 
-impl<TSocket> AsyncRead for NoiseSocket<TSocket>
+impl<TSocket> AsyncRead for NoiseSession<TSocket>
 where
     TSocket: AsyncRead + Unpin,
 {
@@ -411,7 +411,7 @@ where
     }
 }
 
-impl<TSocket> AsyncWrite for NoiseSocket<TSocket>
+impl<TSocket> AsyncWrite for NoiseSession<TSocket>
 where
     TSocket: AsyncWrite + Unpin,
 {
@@ -441,7 +441,7 @@ where
 const MAX_WRITE_BUFFER_LENGTH: usize = noise::decrypted_len(noise::MAX_SIZE_NOISE_MSG);
 
 /// Collection of buffers used for buffering data during the various read/write states of a
-/// NoiseSocket
+/// NoiseSession
 struct NoiseBuffers {
     /// TODO: doc
     read_buffer: [u8; noise::MAX_SIZE_NOISE_MSG],
@@ -556,7 +556,7 @@ where
 mod test {
     use super::*;
 
-    use crate::handshake::NoiseWrapper;
+    use crate::noise_wrapper::handshake::NoiseWrapper;
     use futures::{
         executor::block_on,
         future::join,
@@ -603,7 +603,7 @@ mod test {
         server_public_key: x25519::PublicKey,
         server: NoiseWrapper,
         trusted_peers: Option<&Arc<RwLock<HashMap<PeerId, NetworkPeerInfo>>>>,
-    ) -> io::Result<(NoiseSocket<MemorySocket>, NoiseSocket<MemorySocket>)> {
+    ) -> io::Result<(NoiseSession<MemorySocket>, NoiseSession<MemorySocket>)> {
         // create an in-memory socket for testing
         let (dialer_socket, listener_socket) = MemorySocket::new_pair();
 

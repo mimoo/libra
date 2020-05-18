@@ -9,7 +9,7 @@ use futures::{
     sink::SinkExt,
     stream::{Stream, StreamExt},
 };
-use libra_crypto::test_utils::TEST_SEED;
+use libra_crypto::{x25519, test_utils::TEST_SEED, Uniform as _};
 use libra_logger::prelude::*;
 use libra_network_address::NetworkAddress;
 use memsocket::MemorySocket;
@@ -21,7 +21,7 @@ use netcore::{
         Transport, TransportExt,
     },
 };
-use noise::{NoiseConfig, NoiseSocket};
+use network::noise_wrapper::{NoiseWrapper, session::NoiseSession};
 use rand::prelude::*;
 use std::{env, ffi::OsString, sync::Arc};
 use tokio::runtime::Handle;
@@ -76,21 +76,27 @@ impl Args {
 }
 
 /// Build a MemorySocket + Noise transport
-pub fn build_memsocket_noise_transport() -> impl Transport<Output = NoiseSocket<MemorySocket>> {
+pub fn build_memsocket_noise_transport() -> impl Transport<Output = NoiseSession<MemorySocket>> {
     MemoryTransport::default().and_then(move |socket, _addr, origin| async move {
         let mut rng: StdRng = SeedableRng::from_seed(TEST_SEED);
-        let noise_config = Arc::new(NoiseConfig::new_random(&mut rng));
-        let (_remote_static_key, socket) = noise_config.upgrade_connection(socket, origin).await?;
+        let private = x25519::PrivateKey::generate(&mut rng);
+        let dummy_public = private.public_key();
+        let noise_config = Arc::new(NoiseWrapper::new(private));
+        // TODO: get this from addr
+        let (_remote_static_key, socket) = noise_config.upgrade_connection(socket, origin, dummy_public, None).await?;
         Ok(socket)
     })
 }
 
 /// Build a Tcp + Noise transport
-pub fn build_tcp_noise_transport() -> impl Transport<Output = NoiseSocket<TcpSocket>> {
+pub fn build_tcp_noise_transport() -> impl Transport<Output = NoiseSession<TcpSocket>> {
     TcpTransport::default().and_then(move |socket, _addr, origin| async move {
         let mut rng: StdRng = SeedableRng::from_seed(TEST_SEED);
-        let noise_config = Arc::new(NoiseConfig::new_random(&mut rng));
-        let (_remote_static_key, socket) = noise_config.upgrade_connection(socket, origin).await?;
+        let private = x25519::PrivateKey::generate(&mut rng);
+        let dummy_public = private.public_key();
+        let noise_config = Arc::new(NoiseWrapper::new(private));
+        // TODO: get this from addr
+        let (_remote_static_key, socket) = noise_config.upgrade_connection(socket, origin, dummy_public, None).await?;
         Ok(socket)
     })
 }

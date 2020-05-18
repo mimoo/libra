@@ -79,6 +79,6 @@
 //! [crypto]: ../libra_crypto/noise/index.html
 
 pub mod handshake;
-pub mod socket;
+pub mod session;
 
 pub use handshake::NoiseWrapper;

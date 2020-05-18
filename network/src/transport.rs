@@ -206,7 +206,7 @@ pub fn build_memory_noise_transport(
                 ));
             }
 
-            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key.as_slice()) {
+            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, remote_static_key.as_slice()) {
                 Ok((peer_id, socket))
             } else {
                 Err(io::Error::new(io::ErrorKind::Other, "Not a trusted peer"))
@@ -243,7 +243,7 @@ pub fn build_unauthenticated_memory_noise_transport(
                 // public key to generate a peer_id for the peer. The only reason this works is
                 // that both are 32 bytes in size. If/when this condition no longer holds, we will
                 // receive an error.
-                let peer_id = PeerId::try_from(remote_static_key).unwrap();
+                let peer_id = PeerId::try_from(remote_static_key.as_slice()).unwrap();
                 Ok((peer_id, socket))
             }
         })
@@ -291,7 +291,7 @@ pub fn build_tcp_noise_transport(
                 .upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers))
                 .await?;
 
-            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key) {
+            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, remote_static_key.as_slice()) {
                 Ok((peer_id, socket))
             } else {
                 security_log(SecurityEvent::InvalidNetworkPeer)
