@@ -22,6 +22,7 @@ mod counters;
 mod peer;
 mod sink;
 mod transport;
+mod noise_wrapper;
 
 pub type DisconnectReason = peer::DisconnectReason;
 pub type ConnectivityRequest = connectivity_manager::ConnectivityRequest;

@@ -3,6 +3,7 @@
 
 use crate::{
     common::NetworkPublicKeys,
+    noise_wrapper::NoiseWrapper,
     protocols::{
         identity::{exchange_handshake, exchange_peerid},
         wire::handshake::v1::{HandshakeMsg, MessagingProtocolVersion, SupportedProtocols},
@@ -15,7 +16,6 @@ use libra_network_address::NetworkAddress;
 use libra_security_logger::{security_log, SecurityEvent};
 use libra_types::PeerId;
 use netcore::transport::{boxed, memory, tcp, ConnectionOrigin, TransportExt};
-use noise_wrapper::NoiseWrapper;
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
@@ -206,7 +206,7 @@ pub fn build_memory_noise_transport(
                 ));
             }
 
-            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key) {
+            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key.as_slice()) {
                 Ok((peer_id, socket))
             } else {
                 Err(io::Error::new(io::ErrorKind::Other, "Not a trusted peer"))
@@ -335,7 +335,7 @@ pub fn build_unauthenticated_tcp_noise_transport(
                 // public key to generate a peer_id for the peer. The only reason this works is that
                 // both are 32 bytes in size. If/when this condition no longer holds, we will receive
                 // an error.
-                let peer_id = PeerId::try_from(remote_static_key).unwrap();
+                let peer_id = PeerId::try_from(remote_static_key.as_slice()).unwrap();
                 Ok((peer_id, socket))
             }
         })

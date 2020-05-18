@@ -31,7 +31,7 @@ use netcore::{
   transport::ConnectionOrigin,
 };
 
-use crate::socket::{poll_read_exact, poll_write_all, NoiseSocket};
+use crate::noise_wrapper::socket::{poll_read_exact, poll_write_all, NoiseSocket};
 
 
 

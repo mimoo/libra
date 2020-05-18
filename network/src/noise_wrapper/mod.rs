@@ -13,7 +13,7 @@
 //! use noise_wrapper::handshake::NoiseWrapper;
 //! use futures::{executor, future, io::{AsyncReadExt, AsyncWriteExt}};
 //! use memsocket::MemorySocket;
-//! use network::NetworkPublicKeys;
+//! use crate::NetworkPublicKeys;
 //! use libra_crypto::{x25519, ed25519, Uniform, PrivateKey, test_utils::TEST_SEED};
 //! use rand::{rngs::StdRng, SeedableRng};
 //! use libra_types::PeerId;
@@ -80,3 +80,5 @@
 
 pub mod handshake;
 pub mod socket;
+
+pub use handshake::NoiseWrapper;
