@@ -288,8 +288,7 @@ where
                         {
                             Ok(authentication_tag) => {
                                 // append the authentication tag
-                                self.buffers.write_buffer
-                                    [*offset..*offset + noise::AES_GCM_TAGLEN]
+                                self.buffers.write_buffer[*offset..*offset + noise::AES_GCM_TAGLEN]
                                     .copy_from_slice(&authentication_tag);
                                 // calculate frame length
                                 let frame_len = noise::encrypted_len(*offset);
@@ -556,22 +555,24 @@ where
 mod test {
     use super::*;
 
-    use crate::noise_wrapper::handshake::NoiseWrapper;
+    use crate::noise_wrapper::handshake::{NoiseWrapper, LAST_SEEN_CLIENT_TIMESTAMPS};
     use futures::{
         executor::block_on,
         future::join,
         io::{AsyncReadExt, AsyncWriteExt},
     };
-    use libra_crypto::{test_utils::TEST_SEED, x25519};
-    use memsocket::MemorySocket;
-    use std::io;
-    use std::sync::{Arc, RwLock};
-    use std::collections::HashMap;
-    use libra_types::PeerId;
     use libra_config::config::NetworkPeerInfo;
+    use libra_crypto::{test_utils::TEST_SEED, x25519};
+    use libra_types::PeerId;
+    use memsocket::MemorySocket;
+    use std::{
+        collections::HashMap,
+        io,
+        sync::{Arc, RwLock},
+    };
 
-    use rand::SeedableRng as _;
     use libra_crypto::traits::Uniform as _;
+    use rand::SeedableRng as _;
 
     // TODO: move the handshake tests to handshake.rs
 
@@ -591,10 +592,7 @@ mod test {
         let client = NoiseWrapper::new(client_private);
         let server = NoiseWrapper::new(server_private);
 
-        (
-            (client, client_public),
-            (server, server_public),
-        )
+        ((client, client_public), (server, server_public))
     }
 
     /// helper to perform a noise handshake with two peers
@@ -604,6 +602,9 @@ mod test {
         server: NoiseWrapper,
         trusted_peers: Option<&Arc<RwLock<HashMap<PeerId, NetworkPeerInfo>>>>,
     ) -> io::Result<(NoiseSession<MemorySocket>, NoiseSession<MemorySocket>)> {
+        // reset timestamp map
+        { LAST_SEEN_CLIENT_TIMESTAMPS.lock().unwrap().clear(); }
+
         // create an in-memory socket for testing
         let (dialer_socket, listener_socket) = MemorySocket::new_pair();
 
@@ -620,21 +621,19 @@ mod test {
     #[test]
     fn test_handshake() {
         // perform handshake with two testing peers
-        let ((client, client_public), (server, server_public)) =
-            build_peers();
+        let ((client, client_public), (server, server_public)) = build_peers();
         let (client, server) = perform_handshake(client, server_public, server, None).unwrap();
 
         assert_eq!(client.get_remote_static(), server_public,);
         assert_eq!(server.get_remote_static(), client_public,);
     }
-    
 
     #[test]
     fn simple_test() -> io::Result<()> {
         // perform handshake with two testing peers
-        let ((client, client_public), (server, server_public)) =
-            build_peers();
-        let (mut client, mut server) = perform_handshake(client, server_public, server, None).unwrap();
+        let ((client, _client_public), (server, server_public)) = build_peers();
+        let (mut client, mut server) =
+            perform_handshake(client, server_public, server, None).unwrap();
 
         block_on(client.write_all(b"stormlight"))?;
         block_on(client.write_all(b" "))?;
@@ -653,9 +652,9 @@ mod test {
     #[test]
     fn interleaved_writes() -> io::Result<()> {
         // perform handshake with two testing peers
-        let ((client, client_public), (server, server_public)) =
-            build_peers();
-        let (mut client, mut server) = perform_handshake(client, server_public, server, None).unwrap();
+        let ((client, _client_public), (server, server_public)) = build_peers();
+        let (mut client, mut server) =
+            perform_handshake(client, server_public, server, None).unwrap();
 
         block_on(client.write_all(b"The Name of the Wind"))?;
         block_on(client.flush())?;
@@ -682,9 +681,9 @@ mod test {
     #[test]
     fn u16_max_writes() -> io::Result<()> {
         // perform handshake with two testing peers
-        let ((client, client_public), (server, server_public)) =
-            build_peers();
-        let (mut client, mut server) = perform_handshake(client, server_public, server, None).unwrap();
+        let ((client, _client_public), (server, server_public)) = build_peers();
+        let (mut client, mut server) =
+            perform_handshake(client, server_public, server, None).unwrap();
 
         let buf_send = [1; noise::MAX_SIZE_NOISE_MSG];
         block_on(client.write_all(&buf_send))?;
@@ -696,5 +695,4 @@ mod test {
 
         Ok(())
     }
-    
 }

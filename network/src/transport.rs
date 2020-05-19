@@ -221,13 +221,16 @@ pub fn build_memory_noise_transport(
         .and_then(move |socket, addr, origin| async move {
             let remote_public_key = match addr.find_noise_proto() {
                 Some(public_key) => public_key,
-                None => return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "SHOULD NOT HAPPEN: remote public key not found",
-                )),
+                None => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SHOULD NOT HAPPEN: remote public key not found",
+                    ))
+                }
             };
-            let (remote_static_key, socket) =
-                noise_config.upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers)).await?;
+            let (remote_static_key, socket) = noise_config
+                .upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers))
+                .await?;
 
             // TODO(philiphayes): reenable after seed peers are always fully rendered
             // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;
@@ -241,7 +244,9 @@ pub fn build_memory_noise_transport(
                 ));
             }
 
-            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, remote_static_key.as_slice()) {
+            if let Some(peer_id) =
+                identity_key_to_peer_id(&trusted_peers, remote_static_key.as_slice())
+            {
                 Ok((peer_id, socket))
             } else {
                 Err(io::Error::new(io::ErrorKind::Other, "Not a trusted peer"))
@@ -268,13 +273,16 @@ pub fn build_unauthenticated_memory_noise_transport(
             async move {
                 let remote_public_key = match addr.find_noise_proto() {
                     Some(public_key) => public_key,
-                    None => return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "SHOULD NOT HAPPEN: remote public key not found",
-                    )),
+                    None => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "SHOULD NOT HAPPEN: remote public key not found",
+                        ))
+                    }
                 };
-                let (remote_static_key, socket) =
-                    noise_config.upgrade_connection(socket, origin, remote_public_key, None).await?;
+                let (remote_static_key, socket) = noise_config
+                    .upgrade_connection(socket, origin, remote_public_key, None)
+                    .await?;
 
                 // TODO(philiphayes): reenable after seed peers are always fully rendered
                 // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;
@@ -330,18 +338,23 @@ pub fn build_tcp_noise_transport(
         .and_then(move |socket, addr, origin| async move {
             let remote_public_key = match addr.find_noise_proto() {
                 Some(public_key) => public_key,
-                None => return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "SHOULD NOT HAPPEN: remote public key not found",
-                )),
+                None => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SHOULD NOT HAPPEN: remote public key not found",
+                    ))
+                }
             };
-            let (remote_static_key, socket) =
-                noise_config.upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers)).await?;
+            let (remote_static_key, socket) = noise_config
+                .upgrade_connection(socket, origin, remote_public_key, Some(&trusted_peers))
+                .await?;
 
             // TODO(philiphayes): reenable after seed peers are always fully rendered
             // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;
 
-            if let Some(peer_id) = identity_key_to_peer_id(&trusted_peers, &remote_static_key.as_slice()) {
+            if let Some(peer_id) =
+                identity_key_to_peer_id(&trusted_peers, &remote_static_key.as_slice())
+            {
                 Ok((peer_id, socket))
             } else {
                 security_log(SecurityEvent::InvalidNetworkPeer)
@@ -374,13 +387,16 @@ pub fn build_unauthenticated_tcp_noise_transport(
             async move {
                 let remote_public_key = match addr.find_noise_proto() {
                     Some(public_key) => public_key,
-                    None => return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "SHOULD NOT HAPPEN: remote public key not found",
-                    )),
+                    None => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "SHOULD NOT HAPPEN: remote public key not found",
+                        ))
+                    }
                 };
-                let (remote_static_key, socket) =
-                    noise_config.upgrade_connection(socket, origin, remote_public_key, None).await?;
+                let (remote_static_key, socket) = noise_config
+                    .upgrade_connection(socket, origin, remote_public_key, None)
+                    .await?;
 
                 // TODO(philiphayes): reenable after seed peers are always fully rendered
                 // expect_noise_pubkey(&addr, remote_static_key.as_slice(), origin)?;

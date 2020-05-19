@@ -1,9 +1,8 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-
 //! The handshake module implements the handshake part of the protocol.
-//! This module also implements additional anti-DoS mitigation, 
+//! This module also implements additional anti-DoS mitigation,
 //! by including a timestamp in each handshake initialization message.
 //! Refer to the module's documentation for more information.
 //! A successful handshake returns a `NoiseSession` which is defined in [socket] module.
@@ -11,29 +10,27 @@
 //! [socket]: crate::socket
 
 use futures::{
-  future::poll_fn,
-  io::{AsyncRead, AsyncWrite},
+    future::poll_fn,
+    io::{AsyncRead, AsyncWrite},
 };
 use once_cell::sync::Lazy;
 use std::{
-  collections::HashMap,
-  io,
-  pin::Pin,
-  sync::{Arc, Mutex, RwLock},
-  time,
+    collections::HashMap,
+    io,
+    pin::Pin,
+    sync::{Arc, Mutex, RwLock},
+    time,
 };
 
 use libra_config::config::NetworkPeerInfo;
 use libra_crypto::{noise, x25519};
 use libra_types::PeerId;
 use netcore::{
-  negotiate::{negotiate_inbound, negotiate_outbound_interactive},
-  transport::ConnectionOrigin,
+    negotiate::{negotiate_inbound, negotiate_outbound_interactive},
+    transport::ConnectionOrigin,
 };
 
 use crate::noise_wrapper::session::{poll_read_exact, poll_write_all, NoiseSession};
-
-
 
 // Timestamp
 // --------
@@ -53,8 +50,8 @@ const MAX_FUTURE_TIMESTAMP: u64 = 10;
 const EXPIRATION_TIMESTAMP: u64 = 60;
 
 /// hashmap to store client timestamps if a connection succeeds
-static LAST_SEEN_CLIENT_TIMESTAMPS: Lazy<Mutex<HashMap<x25519::PublicKey, u64>>> =
-  Lazy::new(|| Mutex::new(HashMap::new()));
+pub(crate) static LAST_SEEN_CLIENT_TIMESTAMPS: Lazy<Mutex<HashMap<x25519::PublicKey, u64>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 // Noise Wrapper
 // -------------
@@ -104,6 +101,7 @@ impl NoiseWrapper {
             if cfg!(test) {
                 panic!("noise: incorrect protocol negotiated");
             } else {
+                println!("DEBUG: 1");
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "noise: incorrect protocol negotiated",
@@ -211,6 +209,7 @@ impl NoiseWrapper {
         if client_timestamp > now
             && client_timestamp - now > time::Duration::from_secs(MAX_FUTURE_TIMESTAMP)
         {
+            println!("DEBUG: 2");
             // if the client timestamp is too far in the future, abort
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -222,6 +221,7 @@ impl NoiseWrapper {
         } else if now.checked_sub(client_timestamp).unwrap()
             > time::Duration::from_secs(EXPIRATION_TIMESTAMP)
         {
+            println!("DEBUG: 3");
             // if the client timestamp is expired, abort
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -264,6 +264,7 @@ impl NoiseWrapper {
                 .find(|(_peer_id, public_keys)| public_keys.identity_public_key == their_public_key)
                 .is_some();
             if !found {
+                println!("DEBUG: 4");
                 // TODO: security logging (mimoo)
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -281,6 +282,7 @@ impl NoiseWrapper {
             if let Some(timestamp) = timestamps.get(&their_public_key) {
                 // TODO: security logging the ip + blocking the ip? (mimoo)
                 if timestamp == &client_timestamp_u64 {
+                    println!("DEBUG: 5");
                     return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!(
@@ -321,7 +323,6 @@ impl NoiseWrapper {
     }
 }
 
-
 //
 // Tests
 // -----
@@ -334,18 +335,19 @@ mod test {
     use futures::{
         executor::block_on,
         future::join,
-        io::{AsyncReadExt, AsyncWriteExt},
     };
-    use libra_crypto::{test_utils::TEST_SEED, x25519};
-    use memsocket::MemorySocket;
-    use std::io;
-    use std::sync::{Arc, RwLock};
-    use std::collections::HashMap;
-    use libra_types::PeerId;
     use libra_config::config::NetworkPeerInfo;
+    use libra_crypto::{test_utils::TEST_SEED, x25519};
+    use libra_types::PeerId;
+    use memsocket::MemorySocket;
+    use std::{
+        collections::HashMap,
+        io,
+        sync::{Arc, RwLock},
+    };
 
-    use rand::SeedableRng as _;
     use libra_crypto::traits::Uniform as _;
+    use rand::SeedableRng as _;
 
     // TODO: move the handshake tests to handshake.rs
 
@@ -365,10 +367,7 @@ mod test {
         let client = NoiseWrapper::new(client_private);
         let server = NoiseWrapper::new(server_private);
 
-        (
-            (client, client_public),
-            (server, server_public),
-        )
+        ((client, client_public), (server, server_public))
     }
 
     /// helper to perform a noise handshake with two peers
@@ -393,12 +392,14 @@ mod test {
 
     #[test]
     fn test_handshake() {
+        // reset timestamp map
+        { LAST_SEEN_CLIENT_TIMESTAMPS.lock().unwrap().clear(); }
+        
         // perform handshake with two testing peers
-        let ((client, client_public), (server, server_public)) =
-            build_peers();
+        let ((client, client_public), (server, server_public)) = build_peers();
         let (client, server) = perform_handshake(client, server_public, server, None).unwrap();
 
         assert_eq!(client.get_remote_static(), server_public,);
         assert_eq!(server.get_remote_static(), client_public,);
     }
-  }
+}

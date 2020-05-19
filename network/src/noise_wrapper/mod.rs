@@ -42,7 +42,7 @@
 //!
 //! // use an in-memory socket as example
 //! let (dialer_socket, listener_socket) = MemorySocket::new_pair();
-//! 
+//!
 //! // perform the handshake
 //! let (client_session, server_session) = executor::block_on(future::join(
 //!    client.dial(dialer_socket, server_public),
@@ -59,7 +59,7 @@
 //! let mut buf = [0; 12];
 //! executor::block_on(server.read_exact(&mut buf))?;
 //! assert_eq!(&buf, b"client hello");
-//! 
+//!
 //! // server -> client
 //! executor::block_on(server.write_all(b"server hello"))?;
 //! executor::block_on(server.flush())?;

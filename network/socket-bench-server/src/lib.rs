@@ -9,7 +9,7 @@ use futures::{
     sink::SinkExt,
     stream::{Stream, StreamExt},
 };
-use libra_crypto::{x25519, test_utils::TEST_SEED, Uniform as _};
+use libra_crypto::{test_utils::TEST_SEED, x25519, Uniform as _};
 use libra_logger::prelude::*;
 use libra_network_address::NetworkAddress;
 use memsocket::MemorySocket;
@@ -21,7 +21,7 @@ use netcore::{
         Transport, TransportExt,
     },
 };
-use network::noise_wrapper::{NoiseWrapper, session::NoiseSession};
+use network::noise_wrapper::{session::NoiseSession, NoiseWrapper};
 use rand::prelude::*;
 use std::{env, ffi::OsString, sync::Arc};
 use tokio::runtime::Handle;
@@ -83,7 +83,9 @@ pub fn build_memsocket_noise_transport() -> impl Transport<Output = NoiseSession
         let dummy_public = private.public_key();
         let noise_config = Arc::new(NoiseWrapper::new(private));
         // TODO: get this from addr
-        let (_remote_static_key, socket) = noise_config.upgrade_connection(socket, origin, dummy_public, None).await?;
+        let (_remote_static_key, socket) = noise_config
+            .upgrade_connection(socket, origin, dummy_public, None)
+            .await?;
         Ok(socket)
     })
 }
@@ -96,7 +98,9 @@ pub fn build_tcp_noise_transport() -> impl Transport<Output = NoiseSession<TcpSo
         let dummy_public = private.public_key();
         let noise_config = Arc::new(NoiseWrapper::new(private));
         // TODO: get this from addr
-        let (_remote_static_key, socket) = noise_config.upgrade_connection(socket, origin, dummy_public, None).await?;
+        let (_remote_static_key, socket) = noise_config
+            .upgrade_connection(socket, origin, dummy_public, None)
+            .await?;
         Ok(socket)
     })
 }

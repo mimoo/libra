@@ -23,9 +23,9 @@ mod peer;
 mod sink;
 mod transport;
 
-#[cfg(not(feature="testing"))]
+#[cfg(not(feature = "testing"))]
 mod noise_wrapper;
-#[cfg(feature="testing")]
+#[cfg(feature = "testing")]
 pub mod noise_wrapper;
 
 pub type DisconnectReason = peer::DisconnectReason;
