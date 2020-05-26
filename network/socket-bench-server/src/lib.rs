@@ -21,9 +21,13 @@ use netcore::{
         Transport, TransportExt,
     },
 };
-use network::noise_wrapper::{session::NoiseSession, NoiseWrapper, AntiReplayTimestamp};
+use network::noise_wrapper::{session::NoiseSession, AntiReplayTimestamp, NoiseWrapper};
 use rand::prelude::*;
-use std::{env, ffi::OsString, sync::{Arc, RwLock}};
+use std::{
+    env,
+    ffi::OsString,
+    sync::{Arc, RwLock},
+};
 use tokio::runtime::Handle;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 

@@ -8,7 +8,7 @@
 // This fuzzes the wrappers we have around the Noise library `snow`.
 //
 
-use crate::noise_wrapper::{NoiseWrapper, AntiReplayTimestamp};
+use crate::noise_wrapper::{AntiReplayTimestamp, NoiseWrapper};
 use futures::{
     executor::block_on,
     future::join,
@@ -16,11 +16,15 @@ use futures::{
     ready,
     task::{Context, Poll},
 };
-use rand_core::SeedableRng;
 use libra_crypto::{test_utils::TEST_SEED, x25519, Uniform as _};
 use memsocket::MemorySocket;
 use once_cell::sync::Lazy;
-use std::{io, pin::Pin, sync::{Arc, RwLock}};
+use rand_core::SeedableRng;
+use std::{
+    io,
+    pin::Pin,
+    sync::{Arc, RwLock},
+};
 
 //
 // Corpus generation
@@ -95,10 +99,10 @@ impl AsyncRead for ExposingSocket {
 
 // let's cache the deterministic keypair
 pub static KEYPAIR: Lazy<(x25519::PrivateKey, x25519::PublicKey)> = Lazy::new(|| {
-  let mut rng = ::rand::rngs::StdRng::from_seed(TEST_SEED);
-  let private_key = x25519::PrivateKey::generate(&mut rng);
-  let public_key = private_key.public_key();
-  (private_key, public_key)
+    let mut rng = ::rand::rngs::StdRng::from_seed(TEST_SEED);
+    let private_key = x25519::PrivateKey::generate(&mut rng);
+    let public_key = private_key.public_key();
+    (private_key, public_key)
 });
 
 fn generate_first_two_messages() -> (Vec<u8>, Vec<u8>) {
@@ -113,8 +117,8 @@ fn generate_first_two_messages() -> (Vec<u8>, Vec<u8>) {
     // perform the handshake
     let anti_replay_timestamps = Arc::new(RwLock::new(AntiReplayTimestamp::new()));
     let (client_session, server_session) = block_on(join(
-      initiator.dial(dialer_socket, public_key),
-      responder.accept(listener_socket, anti_replay_timestamps, None),
+        initiator.dial(dialer_socket, public_key),
+        responder.accept(listener_socket, anti_replay_timestamps, None),
     ));
 
     // take result

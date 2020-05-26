@@ -569,7 +569,7 @@ where
 mod test {
     use super::*;
 
-    use crate::noise_wrapper::handshake::{NoiseWrapper, AntiReplayTimestamp};
+    use crate::noise_wrapper::handshake::{AntiReplayTimestamp, NoiseWrapper};
     use futures::{
         executor::block_on,
         future::join,

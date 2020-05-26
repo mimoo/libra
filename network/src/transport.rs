@@ -3,7 +3,7 @@
 
 use crate::{
     common::NetworkPublicKeys,
-    noise_wrapper::{NoiseWrapper, AntiReplayTimestamp},
+    noise_wrapper::{AntiReplayTimestamp, NoiseWrapper},
     protocols::{
         identity::{exchange_handshake, exchange_peerid},
         wire::handshake::v1::{HandshakeMsg, MessagingProtocolVersion, SupportedProtocols},
@@ -222,7 +222,13 @@ pub fn build_memory_noise_transport(
         .and_then(move |socket, addr, origin| async move {
             let remote_public_key = addr.find_noise_proto();
             let (remote_static_key, socket) = noise_config
-                .upgrade_connection(socket, origin, noise_timestamps, remote_public_key, Some(&trusted_peers))
+                .upgrade_connection(
+                    socket,
+                    origin,
+                    noise_timestamps,
+                    remote_public_key,
+                    Some(&trusted_peers),
+                )
                 .await?;
 
             // TODO(philiphayes): reenable after seed peers are always fully rendered
@@ -316,7 +322,13 @@ pub fn build_tcp_noise_transport(
         .and_then(move |socket, addr, origin| async move {
             let remote_public_key = addr.find_noise_proto();
             let (remote_static_key, socket) = noise_config
-                .upgrade_connection(socket, origin, noise_timestamps, remote_public_key, Some(&trusted_peers))
+                .upgrade_connection(
+                    socket,
+                    origin,
+                    noise_timestamps,
+                    remote_public_key,
+                    Some(&trusted_peers),
+                )
                 .await?;
 
             // TODO(philiphayes): reenable after seed peers are always fully rendered

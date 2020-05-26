@@ -9,9 +9,7 @@
 //!
 //! [socket]: network::noise_wrapper::socket
 
-use futures::{
-    io::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt},
-};
+use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use std::{
     collections::HashMap,
     io,
@@ -110,17 +108,22 @@ impl NoiseWrapper {
         // perform the noise handshake
         let socket = match origin {
             ConnectionOrigin::Outbound => {
-                let remote_public_key = match remote_public_key{
+                let remote_public_key = match remote_public_key {
                     Some(key) => key,
                     None if cfg!(test) => unreachable!(),
-                    None =>  return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "noise: SHOULD NOT HAPPEN: missing server's key when dialing",
-                    ))
+                    None => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "noise: SHOULD NOT HAPPEN: missing server's key when dialing",
+                        ))
+                    }
                 };
                 self.dial(socket, remote_public_key).await?
-            },
-            ConnectionOrigin::Inbound => self.accept(socket, anti_replay_timestamps, trusted_peers).await?,
+            }
+            ConnectionOrigin::Inbound => {
+                self.accept(socket, anti_replay_timestamps, trusted_peers)
+                    .await?
+            }
         };
 
         // return remote public key with a socket including the noise session
