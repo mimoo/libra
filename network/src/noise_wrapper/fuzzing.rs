@@ -8,7 +8,7 @@
 // This fuzzes the wrappers we have around the Noise library `snow`.
 //
 
-use crate::noise_wrapper::{NoiseWrapper, session::NoiseSession, AntiReplayTimestamp};
+use crate::noise_wrapper::{NoiseWrapper, AntiReplayTimestamp};
 use futures::{
     executor::block_on,
     future::join,
@@ -86,13 +86,6 @@ impl AsyncRead for ExposingSocket {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         Pin::new(&mut self.inner).poll_read(context, buf)
-    }
-}
-
-// take_socket is implemented on parent structure to be able to retrieve our ExposingSocket
-impl NoiseSession<ExposingSocket> {
-    fn take_socket(self) -> ExposingSocket {
-        self.take_socket()
     }
 }
 

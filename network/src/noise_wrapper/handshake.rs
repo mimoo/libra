@@ -212,6 +212,7 @@ impl NoiseWrapper {
         if client_timestamp > now
             && client_timestamp - now > time::Duration::from_secs(MAX_FUTURE_TIMESTAMP)
         {
+            println!("DEBUG 1");
             // if the client timestamp is too far in the future, abort
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -223,6 +224,7 @@ impl NoiseWrapper {
         } else if now.checked_sub(client_timestamp).unwrap()
             > time::Duration::from_secs(EXPIRATION_TIMESTAMP)
         {
+            println!("DEBUG 2");
             // if the client timestamp is expired, abort
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -242,6 +244,7 @@ impl NoiseWrapper {
             .0
             .parse_client_init_message(&prologue, &client_init_message)
             .map_err(|e| {
+                println!("DEBUG 3");
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("noise: wrong message received {}", e),
@@ -257,6 +260,7 @@ impl NoiseWrapper {
                 .find(|(_peer_id, public_keys)| public_keys.identity_public_key == their_public_key)
                 .is_some();
             if !found {
+                println!("DEBUG 4");
                 // TODO: security logging (mimoo)
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -274,6 +278,7 @@ impl NoiseWrapper {
             if let Some(timestamp) = timestamps.get(&their_public_key) {
                 // TODO: security logging the ip + blocking the ip? (mimoo)
                 if timestamp == &client_timestamp_u64 {
+                    println!("DEBUG 5");
                     return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!(
@@ -292,6 +297,7 @@ impl NoiseWrapper {
             .0
             .respond_to_client(&mut rng, handshake_state, None, &mut server_response)
             .map_err(|e| {
+                println!("DEBUG 6");
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("noise: wrong message received {}", e),
