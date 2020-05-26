@@ -85,4 +85,7 @@
 pub mod handshake;
 pub mod session;
 
+#[cfg(any(test, feature="fuzzing"))]
+pub mod fuzzing;
+
 pub use handshake::{NoiseWrapper, AntiReplayTimestamp};

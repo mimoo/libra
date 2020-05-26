@@ -79,6 +79,11 @@ impl<TSocket> NoiseSession<TSocket> {
     ) -> Result<Vec<u8>, noise::NoiseError> {
         self.session.write_message_in_place(message)
     }
+
+    #[cfg(feature = "fuzzing")]
+    pub fn take_socket(self) -> TSocket {
+        self.socket
+    }
 }
 
 //
