@@ -135,7 +135,7 @@ impl Arbitrary for QuorumCert {
 
     fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
         (any::<VoteData>(), any::<LedgerInfoWithSignatures>())
-            .prop_map(|vote_data, signed_ledger_info| Self {
+            .prop_map(|(vote_data, signed_ledger_info)| Self {
                 vote_data,
                 signed_ledger_info,
             })

@@ -3,12 +3,14 @@
 
 use crate::{epoch_state::EpochState, on_chain_config::ValidatorSet, transaction::Version};
 use libra_crypto::hash::HashValue;
-#[cfg(any(test, feature = "fuzzing"))]
-use libra_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
-#[cfg(any(test, feature = "fuzzing"))]
-use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+
+#[cfg(any(test, feature = "fuzzing"))]
+use ::{
+    libra_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH, 
+    proptest::prelude::*
+};
 
 /// The round of a block is a consensus-internal counter, which starts with 0 and increases
 /// monotonically.

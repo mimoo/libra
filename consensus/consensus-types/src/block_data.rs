@@ -195,8 +195,8 @@ impl Arbitrary for BlockType {
 
     fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
         prop_oneof![
-            (any::<Payload>, any::<Author>())
-                .prop_map(|payload, author| Self::Proposal { payload, author }),
+            (any::<Payload>(), any::<Author>())
+                .prop_map(|(payload, author)| Self::Proposal { payload, author }),
             Just(Self::NilBlock),
             Just(Self::Genesis),
         ]
