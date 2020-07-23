@@ -37,22 +37,6 @@ use safety_rules::{test_utils, SafetyRules, TSafetyRules};
 use std::{collections::BTreeMap, num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
-// This generates a proposal for round 1
-pub fn generate_corpus_proposal() -> Vec<u8> {
-    let mut round_manager = create_node_for_fuzzing();
-    block_on(async {
-        let proposal = round_manager
-            .generate_proposal(NewRoundEvent {
-                round: 1,
-                reason: NewRoundReason::QCReady,
-                timeout: std::time::Duration::new(5, 0),
-            })
-            .await;
-        // serialize and return proposal
-        lcs::to_bytes(&proposal.unwrap()).unwrap()
-    })
-}
-
 // optimization for the fuzzer
 static STATIC_RUNTIME: Lazy<Runtime> = Lazy::new(|| Runtime::new().unwrap());
 static FUZZING_SIGNER: Lazy<ValidatorSigner> = Lazy::new(|| ValidatorSigner::from_int(1));
@@ -167,21 +151,32 @@ fn create_node_for_fuzzing() -> RoundManager {
     )
 }
 
-// This functions fuzzes a Proposal protobuffer (not a ConsensusMsg)
-pub fn fuzz_proposal(data: &[u8]) {
+//
+// Proposal Fuzzing
+//
+
+// This generates a proposal for round 1
+pub fn generate_corpus_proposal() -> Vec<u8> {
+    let mut round_manager = create_node_for_fuzzing();
+    block_on(async {
+        let proposal = round_manager
+            .generate_proposal(NewRoundEvent {
+                round: 1,
+                reason: NewRoundReason::QCReady,
+                timeout: std::time::Duration::new(5, 0),
+            })
+            .await;
+        // serialize and return proposal
+        lcs::to_bytes(&proposal.unwrap()).unwrap()
+    })
+}
+
+/// TKTK
+pub fn fuzz_proposal(proposal: ProposalMsg) {
     // create node
     let mut round_manager = create_node_for_fuzzing();
 
-    let proposal: ProposalMsg = match lcs::from_bytes(data) {
-        Ok(xx) => xx,
-        Err(_) => {
-            if cfg!(test) {
-                panic!();
-            }
-            return;
-        }
-    };
-
+    // verify well-formedness but avoid signature check
     let proposal = match proposal.verify_well_formed() {
         Ok(_) => proposal,
         Err(e) => {
@@ -205,6 +200,7 @@ pub fn fuzz_proposal(data: &[u8]) {
 fn test_consensus_proposal_fuzzer() {
     // generate a proposal
     let proposal = generate_corpus_proposal();
+
     // successfully parse it
     fuzz_proposal(&proposal);
 }
