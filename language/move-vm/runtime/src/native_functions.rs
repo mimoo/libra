@@ -151,7 +151,8 @@ impl<'a> NativeContext for FunctionContext<'a> {
         ty: Type,
         val: Value,
     ) -> PartialVMResult<()> {
-        Ok(self.data_store.emit_event(guid, seq_num, ty, val))
+        self.data_store.emit_event(guid, seq_num, ty, val);
+        Ok(())
     }
 
     fn type_to_type_layout(&self, ty: &Type) -> PartialVMResult<MoveTypeLayout> {

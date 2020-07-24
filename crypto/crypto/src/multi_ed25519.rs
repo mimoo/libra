@@ -123,10 +123,10 @@ impl MultiEd25519PublicKey {
 ///////////////////////
 
 /// Convenient method to create a MultiEd25519PrivateKey from a single Ed25519PrivateKey.
-impl From<&Ed25519PrivateKey> for MultiEd25519PrivateKey {
-    fn from(ed_private_key: &Ed25519PrivateKey) -> Self {
+impl From<Ed25519PrivateKey> for MultiEd25519PrivateKey {
+    fn from(ed_private_key: Ed25519PrivateKey) -> Self {
         MultiEd25519PrivateKey {
-            private_keys: vec![Ed25519PrivateKey::try_from(&ed_private_key.to_bytes()[..]).unwrap()],
+            private_keys: vec![ed_private_key],
             threshold: 1u8,
         }
     }

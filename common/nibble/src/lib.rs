@@ -8,15 +8,19 @@
 #[cfg(feature = "fuzzing")]
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{convert::TryFrom, fmt};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Nibble(u8);
 
-impl From<u8> for Nibble {
-    fn from(nibble: u8) -> Self {
-        assert!(nibble < 16, "Nibble out of range: {}", nibble);
-        Self(nibble)
+impl TryFrom<u8> for Nibble {
+    type Error = ();
+
+    fn try_from(nibble: u8) -> Result<Self, ()> {
+        if !(nibble < 16) {
+            return Err(());
+        } // "Nibble out of range: {}", nibble);
+        Ok(Self(nibble))
     }
 }
 

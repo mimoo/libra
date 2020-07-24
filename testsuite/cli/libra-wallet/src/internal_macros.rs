@@ -8,12 +8,19 @@
 
 macro_rules! impl_array_newtype {
     ($thing:ident, $ty:ty, $len:expr) => {
-        impl<'a> From<&'a [$ty]> for $thing {
-            fn from(data: &'a [$ty]) -> $thing {
-                assert_eq!(data.len(), $len);
+        impl<'a> TryFrom<&'a [$ty]> for $thing {
+            type Error = anyhow::Error;
+
+            fn try_from(data: &'a [$ty]) -> anyhow::Result<Self> {
+                anyhow::ensure!(
+                    data.len() == $len,
+                    "incorrect length {}, expected {}",
+                    data.len(),
+                    $len
+                );
                 let mut ret = [0; $len];
                 ret.copy_from_slice(&data[..]);
-                $thing(ret)
+                Ok($thing(ret))
             }
         }
 
@@ -69,7 +76,7 @@ macro_rules! impl_array_newtype {
         impl Clone for $thing {
             #[inline]
             fn clone(&self) -> $thing {
-                $thing::from(&self[..])
+                $thing::try_from(&self[..]).expect("incorrect length")
             }
         }
 

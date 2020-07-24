@@ -140,7 +140,7 @@ impl KeyFactory {
         let hkdf_extract = Hkdf::<Sha3_256>::extract(Some(KeyFactory::MAIN_KEY_SALT), &seed.0)?;
 
         Ok(Self {
-            main: Main::from(&hkdf_extract[..32]),
+            main: Main::try_from(&hkdf_extract[..32])?,
         })
     }
 
