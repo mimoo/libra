@@ -1,13 +1,13 @@
 use crate::{
-    protocols::wire::handshake::v1::{HandshakeMsg, MessagingProtocolVersion, SupportedProtocols},
+    protocols::{
+        wire::handshake::v1::{HandshakeMsg, MessagingProtocolVersion, SupportedProtocols},
+        {identity::exchange_handshake, perform_handshake},
+    },
     testutils::fake_socket::ReadOnlyTestSocketVec,
-    transport::perform_handshake,
 };
 use futures::executor::block_on;
 use libra_config::network_id::NetworkId;
-use libra_network_address::NetworkAddress;
 use libra_types::{chain_id::ChainId, PeerId};
-use netcore::transport::ConnectionOrigin;
 use proptest::{collection::btree_map, prelude::*};
 
 //
@@ -28,19 +28,29 @@ fn serialize_handshake_message(handshake_msg: &HandshakeMsg) -> Vec<u8> {
 /// Fuzzing the handshake protocol, which negotiates protocols supported by both
 /// the client and the server.
 /// At the moment, fuzzing the client or the server leads to the same logic.
-pub fn fuzz_network_handshake_protocol_negotiation(own_handshake: &HandshakeMsg, data: Vec<u8>) {
-    // the logic is not impacted by these variables
-    let peer_id = PeerId::ZERO;
-    let origin = ConnectionOrigin::Outbound;
-    let network_addr = NetworkAddress::mock();
-
+pub fn fuzz_network_handshake_protocol_exchange(own_handshake: &HandshakeMsg, data: Vec<u8>) {
     // fake socket to read the other peer's serialized HandshakeMsg from
     let mut fake_socket = ReadOnlyTestSocketVec::new(data);
     fake_socket.set_trailing();
 
-    // fuzz it!
+    // fuzz the network exchange of HandshakeMsg first
     let _ = block_on(async move {
-        perform_handshake(peer_id, fake_socket, network_addr, origin, own_handshake).await
+        if let Ok(remote_handshake_msg) = exchange_handshake(own_handshake, &mut fake_socket).await
+        {
+            // then perform the negotiation
+            perform_handshake(PeerId::ZERO, remote_handshake_msg, own_handshake).await;
+        }
+    });
+}
+
+/// Same function as fuzz_network_handshake_protocol_exchange except that the network exchange is skipped,
+/// letting us skip LCS deserialization (and potentially other logic) and fuzz the negotiation of protocols directly.
+pub fn fuzz_network_handshake_protocol_negotiation(
+    own_handshake: &HandshakeMsg,
+    their_handshake: &HandshakeMsg,
+) {
+    block_on(async move {
+        perform_handshake(PeerId::ZERO, their_handshake, own_handshake).await;
     });
 }
 

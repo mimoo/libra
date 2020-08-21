@@ -5,7 +5,7 @@ use crate::{
     logging::network_events,
     noise::{stream::NoiseStream, AntiReplayTimestamps, HandshakeAuthMode, NoiseUpgrader},
     protocols::{
-        identity::exchange_handshake,
+        identity::{exchange_handshake, perform_handshake},
         wire::handshake::v1::{HandshakeMsg, MessagingProtocolVersion, SupportedProtocols},
     },
 };
@@ -164,52 +164,6 @@ pub struct Connection<TSocket> {
     pub metadata: ConnectionMetadata,
 }
 
-/// Exchange HandshakeMsg's to try negotiating a set of common supported protocols.
-pub async fn perform_handshake<T: TSocket>(
-    peer_id: PeerId,
-    mut socket: T,
-    addr: NetworkAddress,
-    origin: ConnectionOrigin,
-    own_handshake: &HandshakeMsg,
-) -> io::Result<Connection<T>> {
-    let remote_handshake = exchange_handshake(&own_handshake, &mut socket).await?;
-    if !own_handshake.verify(&remote_handshake) {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "Handshakes don't match networks own: {} received: {}",
-                own_handshake, remote_handshake
-            ),
-        ));
-    }
-
-    let intersecting_protocols = own_handshake.find_common_protocols(&remote_handshake);
-    match intersecting_protocols {
-        None => {
-            info!(
-                "No matching protocols found for connection with peer: {}. Handshake received: {}",
-                peer_id.short_str(),
-                remote_handshake
-            );
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no matching messaging protocol",
-            ))
-        }
-        Some((messaging_protocol, application_protocols)) => Ok(Connection {
-            socket,
-            metadata: ConnectionMetadata::new(
-                peer_id,
-                CONNECTION_ID_GENERATOR.next(),
-                addr,
-                origin,
-                messaging_protocol,
-                application_protocols,
-            ),
-        }),
-    }
-}
-
 /// Convenience function for adding a timeout to a Future that returns an `io::Result`.
 async fn timeout_io<F, T>(duration: Duration, fut: F) -> io::Result<T>
 where
@@ -243,7 +197,7 @@ async fn upgrade_inbound<T: TSocket>(
     let socket = fut_socket.await?;
 
     // try authenticating via noise handshake
-    let (socket, peer_id) = ctxt.noise.upgrade_inbound(socket).await.map_err(|err| {
+    let (mut socket, remote_peer_id) = ctxt.noise.upgrade_inbound(socket).await.map_err(|err| {
         // security logging
         sl_warn!(security_log(security_events::INVALID_NETWORK_PEER)
             .data_display("error", &err)
@@ -254,7 +208,22 @@ async fn upgrade_inbound<T: TSocket>(
     let addr = addr.append_prod_protos(remote_pubkey, HANDSHAKE_VERSION);
 
     // try to negotiate common libranet version and supported application protocols
-    perform_handshake(peer_id, socket, addr, origin, &ctxt.own_handshake).await
+    let remote_handshake = exchange_handshake(&ctxt.own_handshake, &mut socket).await?;
+    let (messaging_protocol, application_protocols) =
+        perform_handshake(remote_peer_id, remote_handshake, &ctxt.own_handshake).await?;
+
+    // return successful connection
+    Ok(Connection {
+        socket,
+        metadata: ConnectionMetadata::new(
+            remote_peer_id,
+            CONNECTION_ID_GENERATOR.next(),
+            addr,
+            origin,
+            messaging_protocol,
+            application_protocols,
+        ),
+    })
 }
 
 /// Upgrade an inbound connection. This means we run a Noise IK handshake for
@@ -270,7 +239,7 @@ async fn upgrade_outbound<T: TSocket>(
     let socket = fut_socket.await?;
 
     // noise handshake
-    let socket = ctxt
+    let mut socket = ctxt
         .noise
         .upgrade_outbound(socket, remote_pubkey, AntiReplayTimestamps::now)
         .await?;
@@ -279,7 +248,22 @@ async fn upgrade_outbound<T: TSocket>(
     debug_assert_eq!(remote_pubkey, socket.get_remote_static());
 
     // try to negotiate common libranet version and supported application protocols
-    perform_handshake(remote_peer_id, socket, addr, origin, &ctxt.own_handshake).await
+    let remote_handshake = exchange_handshake(&ctxt.own_handshake, &mut socket).await?;
+    let (messaging_protocol, application_protocols) =
+        perform_handshake(remote_peer_id, remote_handshake, &ctxt.own_handshake).await?;
+
+    // return successful connection
+    Ok(Connection {
+        socket,
+        metadata: ConnectionMetadata::new(
+            remote_peer_id,
+            CONNECTION_ID_GENERATOR.next(),
+            addr,
+            origin,
+            messaging_protocol,
+            application_protocols,
+        ),
+    })
 }
 
 /// The common LibraNet Transport.
@@ -879,50 +863,5 @@ mod test {
             "/ip4/127.0.0.1/tcp/0",
             expect_ip4_tcp_noise_addr,
         );
-    }
-
-    ///////////////////////
-    // perform_handshake //
-    ///////////////////////
-
-    #[test]
-    fn handshake_network_id_mismatch() {
-        let (outbound, inbound) = MemorySocket::new_pair();
-
-        let mut server_handshake = HandshakeMsg::new(ChainId::default(), NetworkId::Validator);
-        // This is required to ensure that test doesn't get an error for a different reason
-        server_handshake.add(
-            MessagingProtocolVersion::V1,
-            [ProtocolId::ConsensusDirectSend].iter().into(),
-        );
-        let mut client_handshake = server_handshake.clone();
-        // Ensure client doesn't match networks
-        client_handshake.network_id = NetworkId::Public;
-
-        let server = async move {
-            perform_handshake(
-                PeerId::random(),
-                inbound,
-                NetworkAddress::mock(),
-                ConnectionOrigin::Inbound,
-                &server_handshake,
-            )
-            .await
-            .unwrap_err()
-        };
-
-        let client = async move {
-            perform_handshake(
-                PeerId::random(),
-                outbound,
-                NetworkAddress::mock(),
-                ConnectionOrigin::Outbound,
-                &client_handshake,
-            )
-            .await
-            .unwrap_err()
-        };
-
-        block_on(future::join(server, client));
     }
 }
