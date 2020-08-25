@@ -69,6 +69,7 @@ impl fmt::Display for ProtocolId {
 //
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 pub struct SupportedProtocols(bitvec::BitVec);
 
 impl TryInto<Vec<ProtocolId>> for SupportedProtocols {
@@ -111,6 +112,7 @@ impl SupportedProtocols {
 /// old to new, old having the smallest value.
 /// We derive `PartialOrd` since nodes need to find highest intersecting protocol version.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Hash, Deserialize, Serialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 pub enum MessagingProtocolVersion {
     V1 = 0,
 }
