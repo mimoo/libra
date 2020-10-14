@@ -19,10 +19,14 @@ ${CARGO} ${CARGOFLAGS} build --release \
          -p libra-genesis-tool \
          -p libra-operational-tool \
          -p libra-node \
-         -p libra-key-manager \
-         -p safety-rules \
          -p db-bootstrapper \
          -p backup-cli \
+         "$@"
+
+# Build the TCB with special flags
+${CARGO} ${CARGOFLAGS} build --release \
+         -p libra-key-manager \
+         -p safety-rules \
          "$@"
 
 # Build and overwrite the libra-node binary with feature failpoints if $ENABLE_FAILPOINTS is configured
