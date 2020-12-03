@@ -1,0 +1,1 @@
+Protobuf files for communication between Libra-Core and consensus go implementation
