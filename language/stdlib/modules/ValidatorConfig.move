@@ -168,6 +168,30 @@ module ValidatorConfig {
     // Rotation methods callable by ValidatorConfig.operator_account
     ///////////////////////////////////////////////////////////////////////////
 
+    /// TKTK
+    public fun set_consensus_key(
+        validator_operator_account: &signer,
+        validator_addr: address,
+        consensus_pubkey: vector<u8>,
+    ) acquires ValidatorConfig {
+        assert(
+            Signer::address_of(validator_operator_account) == get_operator(validator_addr),
+            Errors::invalid_argument(EINVALID_TRANSACTION_SENDER)
+        );
+        assert(
+            Signature::ed25519_validate_pubkey(copy consensus_pubkey),
+            Errors::invalid_argument(EINVALID_CONSENSUS_KEY)
+        );
+        // TODO(valerini): verify the proof of posession for consensus_pubkey
+        assert(exists_config(validator_addr), Errors::not_published(EVALIDATOR_CONFIG));
+        let t_ref = borrow_global_mut<ValidatorConfig>(validator_addr);
+        t_ref.config = Option::some(Config {
+            consensus_pubkey,
+            t_ref.config.validator_network_addresses,
+            t_ref.config.fullnode_network_addresses,
+        });
+    }
+
     /// Rotate the config in the validator_account.
     /// Once the config is set, it can not go back to `Option::none` - this is crucial for validity
     /// of the LibraSystem's code.
