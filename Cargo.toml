@@ -119,6 +119,7 @@ members = [
     "network/simple-onchain-discovery",
     "network/socket-bench-server",
     "sdk/client",
+    "sdk/verifying_client",
     "secure/key-manager",
     "secure/net",
     "secure/push-metrics",
